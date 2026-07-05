@@ -1,0 +1,102 @@
+{
+  "$schema_note": "Controlled characteristic vocabulary. Traits are grouped into four top-level families. Each trait has a stable id, a display name, a one-line definition, and a canonical example game. This is a stub; groups and traits will expand during vocabulary design.",
+  "version": "0.1.0-stub",
+  "groups": {
+    "tone_theme": {
+      "name": "Tone & Theme",
+      "description": "The emotional register and subject matter a game evokes.",
+      "traits": [
+        {
+          "id": "tone_melancholic",
+          "name": "Melancholic",
+          "definition": "A pervasive wistful sadness that colors the world and its story.",
+          "example_game": "Disco Elysium"
+        },
+        {
+          "id": "tone_cozy",
+          "name": "Cozy",
+          "definition": "Low-stakes, comforting play that prioritizes warmth over tension.",
+          "example_game": "Stardew Valley"
+        },
+        {
+          "id": "theme_existential",
+          "name": "Existential",
+          "definition": "Foregrounds questions of meaning, mortality, and identity.",
+          "example_game": "The Talos Principle"
+        }
+      ]
+    },
+    "mechanics": {
+      "name": "Mechanics",
+      "description": "The core interactive systems the player operates.",
+      "traits": [
+        {
+          "id": "mech_deckbuilding",
+          "name": "Deckbuilding",
+          "definition": "Players assemble and refine a deck of cards as the primary progression loop.",
+          "example_game": "Slay the Spire"
+        },
+        {
+          "id": "mech_immersive_sim",
+          "name": "Immersive Sim",
+          "definition": "Systemic worlds where interacting rules permit many valid solutions.",
+          "example_game": "Prey"
+        },
+        {
+          "id": "mech_permadeath",
+          "name": "Permadeath",
+          "definition": "Death is permanent, resetting progress and raising the weight of each choice.",
+          "example_game": "Hades"
+        }
+      ]
+    },
+    "aesthetic": {
+      "name": "Aesthetic",
+      "description": "The audiovisual style and presentation.",
+      "traits": [
+        {
+          "id": "aes_pixel_art",
+          "name": "Pixel Art",
+          "definition": "Deliberately low-resolution, hand-placed pixel visuals.",
+          "example_game": "Celeste"
+        },
+        {
+          "id": "aes_painterly",
+          "name": "Painterly",
+          "definition": "Hand-painted textures and brushwork evoking traditional media.",
+          "example_game": "Gris"
+        },
+        {
+          "id": "aes_diegetic_ui",
+          "name": "Diegetic UI",
+          "definition": "Interface elements exist inside the fiction rather than overlaying it.",
+          "example_game": "Dead Space"
+        }
+      ]
+    },
+    "structure": {
+      "name": "Structure",
+      "description": "How play is organized across time and space.",
+      "traits": [
+        {
+          "id": "struct_metroidvania",
+          "name": "Metroidvania",
+          "definition": "An interconnected map gated by abilities, rewarding backtracking.",
+          "example_game": "Hollow Knight"
+        },
+        {
+          "id": "struct_roguelike_run",
+          "name": "Run-Based",
+          "definition": "Play is divided into discrete attempts with meta-progression between them.",
+          "example_game": "Dead Cells"
+        },
+        {
+          "id": "struct_open_world",
+          "name": "Open World",
+          "definition": "A large continuous space explorable in a largely non-linear order.",
+          "example_game": "The Legend of Zelda: Breath of the Wild"
+        }
+      ]
+    }
+  }
+}
