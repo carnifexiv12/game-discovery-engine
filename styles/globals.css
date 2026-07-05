@@ -393,6 +393,61 @@ a:hover {
   color: var(--text-faint);
   font-size: 0.9rem;
 }
+.claim-strip--form {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+/* ---- Claim form ---- */
+.claim-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 16px;
+  width: 100%;
+}
+.claim-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 0.82rem;
+  color: var(--text-soft);
+}
+.claim-form input,
+.claim-form textarea {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--card);
+  color: var(--text);
+  font-size: 0.95rem;
+  font-family: inherit;
+}
+.claim-form input:focus,
+.claim-form textarea:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.claim-form textarea {
+  resize: vertical;
+}
+.claim-form .turnstile {
+  min-height: 65px;
+}
+.claim-actions {
+  display: flex;
+  gap: 10px;
+}
+.form-error {
+  color: #e5484d;
+  font-size: 0.88rem;
+  margin: 0;
+}
+.form-note {
+  color: var(--text-soft);
+  font-size: 0.88rem;
+  margin: 0;
+}
 
 /* ---- Results page ---- */
 .results-source {

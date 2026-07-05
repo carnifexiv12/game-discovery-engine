@@ -1,7 +1,7 @@
 import Link from "next/link";
 import Layout from "../../components/Layout";
+import ClaimForm from "../../components/ClaimForm";
 import {
-  ClaimStrip,
   Cover,
   JsonLd,
   KinCard,
@@ -104,7 +104,7 @@ export default function GamePage({ site, game, kin }) {
         </p>
       )}
 
-      <ClaimStrip game={game} />
+      <ClaimForm game={game} />
     </Layout>
   );
 }
