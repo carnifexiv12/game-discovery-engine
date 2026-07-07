@@ -18,25 +18,86 @@ export function coverGradient(seed: string): string {
   return `linear-gradient(150deg, hsl(${a} 62% 42%), hsl(${b} 58% 28%))`;
 }
 
+const STEAM_CDN = "https://cdn.akamai.steamstatic.com/steam/apps";
+
+/** Landscape store capsule (460×215). */
+export function steamHeader(appid: number): string {
+  return `${STEAM_CDN}/${appid}/header.jpg`;
+}
+
+/** Portrait library art (600×900), a better fit for the 3:4 cover slots. */
+export function steamLibraryPortrait(appid: number): string {
+  return `${STEAM_CDN}/${appid}/library_600x900.jpg`;
+}
+
 export function Cover({
   game,
   small = false,
 }: {
-  game: Pick<Game, "slug" | "title" | "cover_url">;
+  game: Pick<Game, "slug" | "title" | "cover_url" | "steam_appid">;
   small?: boolean;
 }) {
   const cls = small ? "cover small" : "cover";
-  if (game.cover_url) {
+
+  // Ordered art candidates: a curated cover_url wins, then the Steam header,
+  // then the portrait library art. onError walks down the list; once it runs
+  // out we render the deterministic gradient. All srcs are server-rendered, so
+  // the CDN URL ships in the static HTML; the swap only runs client-side.
+  const candidates: string[] = [];
+  if (game.cover_url) candidates.push(game.cover_url);
+  if (game.steam_appid) {
+    candidates.push(steamHeader(game.steam_appid));
+    candidates.push(steamLibraryPortrait(game.steam_appid));
+  }
+
+  const [idx, setIdx] = React.useState(0);
+  const src = candidates[idx];
+
+  if (src) {
     return (
       <div className={cls} style={{ padding: 0 }}>
         {/* Static export + images.unoptimized: plain img is intentional. */}
-        <img src={game.cover_url} alt={`${game.title} cover art`} />
+        <img
+          src={src}
+          alt={`${game.title} cover art`}
+          loading="lazy"
+          onError={() => setIdx((i) => i + 1)}
+        />
       </div>
     );
   }
+
   return (
     <div className={cls} style={{ background: coverGradient(game.slug) }}>
       {game.title}
+    </div>
+  );
+}
+
+/** Small landscape cover thumbnail for kin cards; gradient on missing/broken art. */
+export function KinThumb({
+  slug,
+  title,
+  steam_appid,
+}: Pick<KinEntry, "slug" | "title" | "steam_appid">) {
+  const [failed, setFailed] = React.useState(false);
+  if (!steam_appid || failed) {
+    return (
+      <div
+        className="kin-thumb"
+        style={{ background: coverGradient(slug) }}
+        aria-hidden="true"
+      />
+    );
+  }
+  return (
+    <div className="kin-thumb">
+      <img
+        src={steamHeader(steam_appid)}
+        alt={`${title} cover art`}
+        loading="lazy"
+        onError={() => setFailed(true)}
+      />
     </div>
   );
 }
@@ -120,18 +181,28 @@ export function StoreButtons({ game }: { game: Game }) {
 export function KinCard({ kin }: { kin: KinEntry }) {
   return (
     <div className="kin-card">
-      <div className="kin-top">
-        <Link href={`/game/${kin.slug}`} className="kin-title">
-          {kin.title}
-        </Link>
-        <span className="match">{kin.match_pct}% match</span>
-      </div>
-      <p className="blurb">{kin.blurb}</p>
-      <p className="reasoning">{kin.reasoning}</p>
-      <TraitPills traits={kin.traits} />
-      <div className="kin-links">
-        <Link href={`/game/${kin.slug}`}>View game</Link>
-        <Link href={`/games-like/${kin.slug}`}>Games like this</Link>
+      <Link
+        href={`/game/${kin.slug}`}
+        className="kin-thumb-link"
+        tabIndex={-1}
+        aria-hidden="true"
+      >
+        <KinThumb slug={kin.slug} title={kin.title} steam_appid={kin.steam_appid} />
+      </Link>
+      <div className="kin-body">
+        <div className="kin-top">
+          <Link href={`/game/${kin.slug}`} className="kin-title">
+            {kin.title}
+          </Link>
+          <span className="match">{kin.match_pct}% match</span>
+        </div>
+        <p className="blurb">{kin.blurb}</p>
+        <p className="reasoning">{kin.reasoning}</p>
+        <TraitPills traits={kin.traits} />
+        <div className="kin-links">
+          <Link href={`/game/${kin.slug}`}>View game</Link>
+          <Link href={`/games-like/${kin.slug}`}>Games like this</Link>
+        </div>
       </div>
     </div>
   );

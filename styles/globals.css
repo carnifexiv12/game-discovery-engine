@@ -334,11 +334,44 @@ a:hover {
   margin: 32px 0 12px;
 }
 .kin-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--card);
   padding: 16px 18px;
   margin-bottom: 12px;
+}
+.kin-thumb-link {
+  flex: 0 0 auto;
+  display: block;
+  line-height: 0;
+}
+.kin-thumb {
+  width: 132px;
+  aspect-ratio: 460 / 215;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bar-track);
+}
+.kin-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.kin-body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+@media (max-width: 520px) {
+  .kin-card {
+    flex-direction: column;
+  }
+  .kin-thumb {
+    width: 100%;
+  }
 }
 .kin-card .kin-top {
   display: flex;

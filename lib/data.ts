@@ -71,6 +71,11 @@ export interface KinEntry {
   blurb: string;
   reasoning: string;
   traits: TraitRef[];
+  /**
+   * Resolved at build time from the referenced game (see getKinForGame), not
+   * stored in kin.json. Lets the kin card show a Steam cover thumbnail.
+   */
+  steam_appid?: number | null;
 }
 
 export interface SiteMeta {
@@ -126,7 +131,13 @@ export function getGameBySlug(slug: string): Game | null {
 }
 
 export function getKinForGame(slug: string): KinEntry[] {
-  return kinFile().kin[slug] ?? [];
+  const entries = kinFile().kin[slug] ?? [];
+  // Enrich each entry with the referenced game's Steam app id so the kin card
+  // can render a cover thumbnail without threading a lookup map through pages.
+  return entries.map((k) => ({
+    ...k,
+    steam_appid: getGameBySlug(k.slug)?.steam_appid ?? null,
+  }));
 }
 
 /** Games with at least one kin entry — the routes worth statically generating. */
