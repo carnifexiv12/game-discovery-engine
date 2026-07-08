@@ -18,7 +18,11 @@ export function coverGradient(seed: string): string {
   return `linear-gradient(150deg, hsl(${a} 62% 42%), hsl(${b} 58% 28%))`;
 }
 
-const STEAM_CDN = "https://cdn.akamai.steamstatic.com/steam/apps";
+// Valve migrated store art to the store_item_assets path in 2025; the legacy
+// cdn.akamai.steamstatic.com/steam/apps path still resolves but is the kind of
+// thing that can be retired without notice. Use the current documented shape.
+const STEAM_CDN =
+  "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps";
 
 /** Landscape store capsule (460×215). */
 export function steamHeader(appid: number): string {
@@ -39,15 +43,16 @@ export function Cover({
 }) {
   const cls = small ? "cover small" : "cover";
 
-  // Ordered art candidates: a curated cover_url wins, then the Steam header,
-  // then the portrait library art. onError walks down the list; once it runs
-  // out we render the deterministic gradient. All srcs are server-rendered, so
-  // the CDN URL ships in the static HTML; the swap only runs client-side.
+  // Ordered art candidates: a curated cover_url wins, then the portrait library
+  // art (600×900, which fits these 3:4 slots without cropping), then the
+  // landscape header as a last resort. onError walks down the list; once it
+  // runs out we render the deterministic gradient. All srcs are server-rendered,
+  // so the CDN URL ships in the static HTML; the swap only runs client-side.
   const candidates: string[] = [];
   if (game.cover_url) candidates.push(game.cover_url);
   if (game.steam_appid) {
-    candidates.push(steamHeader(game.steam_appid));
     candidates.push(steamLibraryPortrait(game.steam_appid));
+    candidates.push(steamHeader(game.steam_appid));
   }
 
   const [idx, setIdx] = React.useState(0);
