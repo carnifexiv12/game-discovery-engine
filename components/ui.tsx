@@ -213,21 +213,6 @@ export function KinCard({ kin }: { kin: KinEntry }) {
   );
 }
 
-export function ClaimStrip({ game }: { game: Game }) {
-  return (
-    <div className="claim-strip">
-      <div className="claim-text">
-        <strong>Work on {game.title}?</strong>
-        <span>Claim this page to correct details or add missing context.</span>
-      </div>
-      {/* Wired to the Turnstile-gated claim form in a later pass. */}
-      <button className="btn" disabled aria-disabled="true">
-        Claim this game
-      </button>
-    </div>
-  );
-}
-
 /** Renders a schema.org JSON-LD block into the document head. */
 export function JsonLd({ data }: { data: Record<string, unknown> }) {
   return (

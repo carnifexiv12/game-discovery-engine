@@ -9,6 +9,10 @@
 next-env.d.ts
 *.tsbuildinfo
 
+# cloudflare / wrangler local secrets
+.dev.vars
+.wrangler
+
 # misc
 .DS_Store
 *.log
