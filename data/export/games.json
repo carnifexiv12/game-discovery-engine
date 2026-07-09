@@ -25,7 +25,7 @@
       "tagline": "A hand-drawn descent into a hollowed kingdom.",
       "characteristics": [
         { "id": "struct_metroidvania", "name": "Metroidvania", "group": "structure", "weight": 0.98, "rationale": "One continuous ability-gated map that rewards patient backtracking." },
-        { "id": "tone_melancholic", "name": "Melancholic", "group": "tone_theme", "weight": 0.85, "rationale": "A dying kingdom rendered with restrained, mournful atmosphere." },
+        { "id": "tone_melancholic", "name": "Melancholic", "group": "tone", "weight": 0.85, "rationale": "A dying kingdom rendered with restrained, mournful atmosphere." },
         { "id": "aes_painterly", "name": "Painterly", "group": "aesthetic", "weight": 0.8, "rationale": "Hand-drawn, ink-and-watercolour environments." },
         { "id": "mech_permadeath", "name": "Permadeath", "group": "mechanics", "weight": 0.35, "rationale": "Death drops your currency at the spot you fell, echoing soulslike stakes." }
       ],
@@ -74,8 +74,8 @@
       },
       "tagline": "A murder mystery argued by the voices in your skull.",
       "characteristics": [
-        { "id": "theme_existential", "name": "Existential", "group": "tone_theme", "weight": 0.95, "rationale": "The plot is a scaffold for questions of failure, ideology, and self." },
-        { "id": "tone_melancholic", "name": "Melancholic", "group": "tone_theme", "weight": 0.9, "rationale": "A hungover city of faded revolutions and personal wreckage." },
+        { "id": "theme_existential", "name": "Existential", "group": "theme", "weight": 0.95, "rationale": "The plot is a scaffold for questions of failure, ideology, and self." },
+        { "id": "tone_melancholic", "name": "Melancholic", "group": "tone", "weight": 0.9, "rationale": "A hungover city of faded revolutions and personal wreckage." },
         { "id": "aes_painterly", "name": "Painterly", "group": "aesthetic", "weight": 0.9, "rationale": "Oil-painted portraits and environments in a deliberately smeared style." },
         { "id": "mech_immersive_sim", "name": "Immersive Sim", "group": "mechanics", "weight": 0.4, "rationale": "Skills act as systemic actors, opening many dialogue-driven paths." }
       ],
@@ -126,7 +126,7 @@
         { "id": "struct_roguelike_run", "name": "Run-Based", "group": "structure", "weight": 0.97, "rationale": "Discrete escape attempts with meta-progression between them." },
         { "id": "mech_permadeath", "name": "Permadeath", "group": "mechanics", "weight": 0.9, "rationale": "Each death resets the run but advances the story." },
         { "id": "aes_painterly", "name": "Painterly", "group": "aesthetic", "weight": 0.75, "rationale": "Lush comic-book character art and vivid god portraits." },
-        { "id": "tone_cozy", "name": "Cozy", "group": "tone_theme", "weight": 0.4, "rationale": "The hub becomes a warm, gossipy home you return to between runs." }
+        { "id": "tone_cozy", "name": "Cozy", "group": "tone", "weight": 0.4, "rationale": "The hub becomes a warm, gossipy home you return to between runs." }
       ],
       "sections": [
         {
@@ -174,9 +174,9 @@
       "tagline": "Climb the mountain, and the panic inside it.",
       "characteristics": [
         { "id": "aes_pixel_art", "name": "Pixel Art", "group": "aesthetic", "weight": 0.95, "rationale": "Crisp, expressive pixel work with a strong colour identity." },
-        { "id": "theme_existential", "name": "Existential", "group": "tone_theme", "weight": 0.6, "rationale": "A literal ascent standing in for a struggle with the self." },
+        { "id": "theme_existential", "name": "Existential", "group": "theme", "weight": 0.6, "rationale": "A literal ascent standing in for a struggle with the self." },
         { "id": "mech_permadeath", "name": "Permadeath", "group": "mechanics", "weight": 0.2, "rationale": "Instant restarts make death frictionless rather than punishing." },
-        { "id": "tone_melancholic", "name": "Melancholic", "group": "tone_theme", "weight": 0.5, "rationale": "Gentle sadness threaded through an ultimately hopeful arc." }
+        { "id": "tone_melancholic", "name": "Melancholic", "group": "tone", "weight": 0.5, "rationale": "Gentle sadness threaded through an ultimately hopeful arc." }
       ],
       "sections": [
         {
@@ -222,10 +222,10 @@
       },
       "tagline": "A solar system that only unlocks in your head.",
       "characteristics": [
-        { "id": "theme_existential", "name": "Existential", "group": "tone_theme", "weight": 0.92, "rationale": "A meditation on endings staged as a physics-driven mystery." },
+        { "id": "theme_existential", "name": "Existential", "group": "theme", "weight": 0.92, "rationale": "A meditation on endings staged as a physics-driven mystery." },
         { "id": "mech_immersive_sim", "name": "Immersive Sim", "group": "mechanics", "weight": 0.7, "rationale": "A fully simulated system where knowledge, not items, is the key." },
         { "id": "struct_open_world", "name": "Open World", "group": "structure", "weight": 0.8, "rationale": "Every planet is reachable from minute one; order is yours to choose." },
-        { "id": "tone_melancholic", "name": "Melancholic", "group": "tone_theme", "weight": 0.65, "rationale": "A wistful warmth about impermanence hums under the exploration." }
+        { "id": "tone_melancholic", "name": "Melancholic", "group": "tone", "weight": 0.65, "rationale": "A wistful warmth about impermanence hums under the exploration." }
       ],
       "sections": [
         {
@@ -274,7 +274,7 @@
         { "id": "mech_deckbuilding", "name": "Deckbuilding", "group": "mechanics", "weight": 0.99, "rationale": "The defining deckbuilding roguelike; every fight reshapes your deck." },
         { "id": "struct_roguelike_run", "name": "Run-Based", "group": "structure", "weight": 0.95, "rationale": "Discrete tower ascents with unlocks between attempts." },
         { "id": "mech_permadeath", "name": "Permadeath", "group": "mechanics", "weight": 0.85, "rationale": "A loss ends the run; the deck you built dies with it." },
-        { "id": "tone_cozy", "name": "Cozy", "group": "tone_theme", "weight": 0.3, "rationale": "The systemic calm of an endlessly replayable puzzle box." }
+        { "id": "tone_cozy", "name": "Cozy", "group": "tone", "weight": 0.3, "rationale": "The systemic calm of an endlessly replayable puzzle box." }
       ],
       "sections": [
         {

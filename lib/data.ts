@@ -15,7 +15,8 @@ import fs from "fs";
 import path from "path";
 
 export type GroupName =
-  | "tone_theme"
+  | "tone"
+  | "theme"
   | "mechanics"
   | "aesthetic"
   | "structure";

@@ -56,9 +56,10 @@ CREATE TABLE IF NOT EXISTS games (
 
 CREATE TABLE IF NOT EXISTS characteristics (
     id          TEXT PRIMARY KEY,    -- e.g. "tone_melancholic"
-    group_name  TEXT NOT NULL,       -- one of the four top-level groups
+    group_name  TEXT NOT NULL,       -- tone | theme | mechanics | aesthetic | structure
     name        TEXT NOT NULL,
-    definition  TEXT
+    definition  TEXT,
+    scale       TEXT                 -- "graded" | "binary" (weight interpretation)
 );
 
 CREATE TABLE IF NOT EXISTS game_characteristics (
@@ -108,11 +109,17 @@ def _seed_vocabulary(conn: sqlite3.Connection) -> None:
     for group_key, group in vocab.get("groups", {}).items():
         for trait in group.get("traits", []):
             rows.append(
-                (trait["id"], group_key, trait["name"], trait.get("definition", ""))
+                (
+                    trait["id"],
+                    group_key,
+                    trait["name"],
+                    trait.get("definition", ""),
+                    trait.get("scale", "graded"),
+                )
             )
     conn.executemany(
-        "INSERT OR IGNORE INTO characteristics (id, group_name, name, definition) "
-        "VALUES (?, ?, ?, ?)",
+        "INSERT OR IGNORE INTO characteristics (id, group_name, name, definition, scale) "
+        "VALUES (?, ?, ?, ?, ?)",
         rows,
     )
     print(f"Seeded {len(rows)} characteristics from vocabulary.json")
