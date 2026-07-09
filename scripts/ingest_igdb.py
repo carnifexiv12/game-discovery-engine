@@ -54,9 +54,10 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DB = REPO_ROOT / "data" / "gde.sqlite"
 ENV_PATH = REPO_ROOT / ".env"
@@ -201,7 +202,12 @@ def release_year(row: dict) -> int | None:
     ts = row.get("first_release_date")
     if not ts:
         return None
-    return datetime.fromtimestamp(ts, tz=timezone.utc).year
+    # datetime.fromtimestamp raises OSError on Windows for negative/out-of-range
+    # timestamps (pre-1970 release dates); epoch + timedelta is portable.
+    try:
+        return (EPOCH + timedelta(seconds=ts)).year
+    except (OverflowError, OSError, ValueError):
+        return None
 
 
 def names(items) -> list[str]:
