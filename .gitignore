@@ -21,6 +21,16 @@ next-env.d.ts
 __pycache__/
 *.pyc
 
+# build artifact: the SQLite DB is regenerated deterministically by the
+# pipeline (init_db + ingest_* + enrich + kin). Only its EXPORT
+# (data/export/*.json) is committed and consumed by the Next build. Never
+# commit the DB — it inflates past git's comfort once Steam data + enrichment
+# land, and every regen would be a multi-MB binary diff.
+data/gde.sqlite
+data/gde.sqlite-journal
+data/gde.sqlite-wal
+data/gde.sqlite-shm
+
 # misc
 .DS_Store
 *.log

@@ -28,15 +28,15 @@ and `public/robots.txt` from the export. (Both files are committed so a bare
 
 ```
 data/
-  vocabulary.json     Controlled characteristic vocabulary (4 groups, stub)
-  gde.sqlite          Committed SQLite db (built by scripts/init_db.py)
-  export/             Static JSON consumed at build time (SAMPLE data)
+  vocabulary.json     Controlled characteristic vocabulary (5 groups, 323 traits)
+  gde.sqlite          Local SQLite db — GITIGNORED build artifact (init_db.py)
+  export/             Static JSON consumed at build time — COMMITTED pipeline output
     games.json
     kin.json
 scripts/
-  init_db.py          Builds gde.sqlite (implemented)
+  init_db.py          Builds the gde.sqlite schema + seeds vocab (implemented)
   gen_seo.mjs         Generates sitemap.xml + robots.txt (implemented)
-  ingest_igdb.py      Pull games from IGDB              (stub)
+  ingest_igdb.py      Pull games from IGDB              (implemented)
   ingest_steam.py     Pull Steam metadata + reviews     (stub)
   enrich_batch.py     Assign weighted characteristics   (stub)
   compute_kin.py      Compute kindred-game edges        (stub)
@@ -49,24 +49,38 @@ pages/
   games-like/[slug].js Results: source traits + ranked kin
 ```
 
-## Data pipeline (intended)
+## Data pipeline
 
 ```
-ingest_igdb / ingest_steam  ->  gde.sqlite (games, corpus)
-enrich_batch                ->  game_characteristics
-compute_kin                 ->  kin
-export_json                 ->  data/export/*.json  ->  next build
+ingest_igdb / ingest_steam  ->  gde.sqlite (games, corpus)   [LOCAL, gitignored]
+enrich_batch                ->  game_characteristics          [LOCAL]
+compute_kin                 ->  kin                            [LOCAL]
+export_json                 ->  data/export/*.json  ->  next build   [COMMITTED]
 ```
 
-Rebuild the database schema at any time:
+**The clean line: DB local, exports committed, Pages builds from exports.**
+`gde.sqlite` is a deterministic build artifact — regenerable from the scripts
+plus IGDB/Steam credentials — so it is **gitignored, never committed**. The only
+pipeline product that enters git is the export (`data/export/*.json`), which the
+templates read and Cloudflare Pages builds from. If you want a safety copy of the
+DB, that is a file in your backups, not a commit.
+
+Credentials for the pipeline live in a gitignored `.env` at the repo root
+(`IGDB_CLIENT_ID`, `IGDB_CLIENT_SECRET`); the ingest scripts load it automatically.
+
+Build the schema + seed the vocabulary, then ingest:
 
 ```bash
 python scripts/init_db.py --seed-vocab
+python scripts/ingest_igdb.py --count-only          # preview corpus size
+python scripts/ingest_igdb.py --min-rating-count 8  # ~10k main games
 ```
 
 ## Next steps
 
-- Vocabulary design (expand `data/vocabulary.json` beyond the stub).
-- Implement `ingest_igdb.py` against real IGDB credentials.
-- Run the calibration batch through `enrich_batch.py`.
-- Wire the Turnstile-gated claim form + `functions/api/claim.ts`.
+- ~~Vocabulary design~~ — done (5 groups, 323 traits).
+- ~~Implement `ingest_igdb.py`~~ — done.
+- ~~Wire the Turnstile-gated claim form~~ — done (`functions/api/claim.ts`).
+- Implement `ingest_steam.py` (appdetails / appreviews / SteamSpy, resumable crawl).
+- Run the enrichment batch through `enrich_batch.py` (Claude Batch API).
+- Implement `compute_kin.py` + `export_json.py`, then regenerate `data/export/`.
