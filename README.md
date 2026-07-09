@@ -37,7 +37,7 @@ scripts/
   init_db.py          Builds the gde.sqlite schema + seeds vocab (implemented)
   gen_seo.mjs         Generates sitemap.xml + robots.txt (implemented)
   ingest_igdb.py      Pull games from IGDB              (implemented)
-  ingest_steam.py     Pull Steam metadata + reviews     (stub)
+  ingest_steam.py     Pull Steam metadata + reviews     (implemented, resumable)
   enrich_batch.py     Assign weighted characteristics   (stub)
   compute_kin.py      Compute kindred-game edges        (stub)
   export_json.py      SQLite -> data/export/*.json      (stub)
@@ -81,6 +81,6 @@ python scripts/ingest_igdb.py --min-rating-count 8  # ~10k main games
 - ~~Vocabulary design~~ — done (5 groups, 323 traits).
 - ~~Implement `ingest_igdb.py`~~ — done.
 - ~~Wire the Turnstile-gated claim form~~ — done (`functions/api/claim.ts`).
-- Implement `ingest_steam.py` (appdetails / appreviews / SteamSpy, resumable crawl).
-- Run the enrichment batch through `enrich_batch.py` (Claude Batch API).
+- ~~Implement `ingest_steam.py`~~ — done (appdetails / appreviews / SteamSpy, resumable).
+- Run the full Steam crawl, then the enrichment batch through `enrich_batch.py` (Claude Batch API).
 - Implement `compute_kin.py` + `export_json.py`, then regenerate `data/export/`.
