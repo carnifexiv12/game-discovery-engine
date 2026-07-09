@@ -13,6 +13,14 @@ next-env.d.ts
 .dev.vars
 .wrangler
 
+# python pipeline secrets (IGDB / Twitch credentials)
+.env
+.env.local
+
+# python
+__pycache__/
+*.pyc
+
 # misc
 .DS_Store
 *.log
