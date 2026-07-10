@@ -197,7 +197,22 @@ def games_to_enrich(conn: sqlite3.Connection, *, force: bool, limit: int | None)
             " AND NOT EXISTS (SELECT 1 FROM game_characteristics gc "
             "WHERE gc.game_id = g.igdb_id)"
         )
-    sql = f"SELECT * FROM games g {where} ORDER BY g.igdb_id"
+    # Enrich the most-reviewed games first: recognizable and corpus-rich, so a
+    # --limit calibration batch lands on titles you can eyeball. Order-neutral
+    # for the full run. Falls back to id order before the Steam crawl exists.
+    has_steam = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='steam_cache'"
+    ).fetchone()
+    if has_steam:
+        join = (
+            "LEFT JOIN (SELECT appid, "
+            "json_extract(payload, '$.query_summary.total_reviews') AS rc "
+            "FROM steam_cache WHERE endpoint = 'appreviews' AND ok = 1) r "
+            "ON r.appid = g.steam_appid "
+        )
+        sql = f"SELECT g.* FROM games g {join}{where} ORDER BY COALESCE(r.rc, 0) DESC, g.igdb_id"
+    else:
+        sql = f"SELECT g.* FROM games g {where} ORDER BY g.igdb_id"
     if limit:
         sql += f" LIMIT {int(limit)}"
     return conn.execute(sql).fetchall()
