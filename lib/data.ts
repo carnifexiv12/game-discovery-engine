@@ -92,6 +92,11 @@ interface GamesFile {
 
 interface KinFile {
   kin: Record<string, KinEntry[]>;
+  /**
+   * Optional "hidden gem" kin: high Steam positive rating, low review count.
+   * Absent in the hand-authored sample export; populated by export_json.py.
+   */
+  hidden_gems?: Record<string, KinEntry[]>;
 }
 
 const EXPORT_DIR = path.join(process.cwd(), "data", "export");
@@ -135,6 +140,14 @@ export function getKinForGame(slug: string): KinEntry[] {
   const entries = kinFile().kin[slug] ?? [];
   // Enrich each entry with the referenced game's Steam app id so the kin card
   // can render a cover thumbnail without threading a lookup map through pages.
+  return entries.map((k) => ({
+    ...k,
+    steam_appid: getGameBySlug(k.slug)?.steam_appid ?? null,
+  }));
+}
+
+export function getHiddenGemsForGame(slug: string): KinEntry[] {
+  const entries = kinFile().hidden_gems?.[slug] ?? [];
   return entries.map((k) => ({
     ...k,
     steam_appid: getGameBySlug(k.slug)?.steam_appid ?? null,

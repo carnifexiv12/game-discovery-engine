@@ -11,6 +11,7 @@ import {
 import {
   getAllSlugs,
   getGameBySlug,
+  getHiddenGemsForGame,
   getKinForGame,
   getSiteMeta,
 } from "../../lib/data";
@@ -30,11 +31,12 @@ export async function getStaticProps({ params }) {
       site: getSiteMeta(),
       game,
       kin: getKinForGame(params.slug),
+      gems: getHiddenGemsForGame(params.slug),
     },
   };
 }
 
-export default function GamePage({ site, game, kin }) {
+export default function GamePage({ site, game, kin, gems }) {
   const base = site.url.replace(/\/$/, "");
   const metaBits = [
     game.year,
@@ -102,6 +104,15 @@ export default function GamePage({ site, game, kin }) {
         <p style={{ color: "var(--text-faint)" }}>
           Kindred games are still being computed for this title.
         </p>
+      )}
+
+      {gems?.length > 0 && (
+        <>
+          <p className="section-label">Closest hidden gems</p>
+          {gems.map((k) => (
+            <KinCard key={k.slug} kin={k} />
+          ))}
+        </>
       )}
 
       <ClaimForm game={game} />
