@@ -1,0 +1,9 @@
+# Python pipeline dependencies.
+#
+# Most scripts (init_db, ingest_igdb, ingest_steam) are stdlib-only and need
+# nothing here. Only the enrichment step talks to the Claude API and needs the
+# official SDK:
+#
+#     pip install -r requirements.txt
+#
+anthropic>=0.69
