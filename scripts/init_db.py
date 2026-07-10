@@ -73,9 +73,11 @@ CREATE TABLE IF NOT EXISTS game_characteristics (
 CREATE TABLE IF NOT EXISTS kin (
     game_id      INTEGER NOT NULL REFERENCES games(igdb_id),
     kin_game_id  INTEGER NOT NULL REFERENCES games(igdb_id),
+    kind         TEXT    NOT NULL DEFAULT 'match',   -- 'match' | 'hidden_gem'
+    rank         INTEGER NOT NULL DEFAULT 0,
     score        REAL    NOT NULL DEFAULT 0.0,
     blurb        TEXT,
-    PRIMARY KEY (game_id, kin_game_id)
+    PRIMARY KEY (game_id, kin_game_id, kind)
 );
 
 CREATE TABLE IF NOT EXISTS corpus (

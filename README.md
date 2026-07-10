@@ -39,8 +39,8 @@ scripts/
   ingest_igdb.py      Pull games from IGDB              (implemented)
   ingest_steam.py     Pull Steam metadata + reviews     (implemented, resumable)
   enrich_batch.py     Assign weighted characteristics   (stub)
-  compute_kin.py      Compute kindred-game edges        (stub)
-  export_json.py      SQLite -> data/export/*.json      (stub)
+  compute_kin.py      Compute kindred-game edges        (implemented, NetworkX)
+  export_json.py      SQLite -> data/export/*.json      (implemented)
 lib/data.ts           Typed build-time loader for the export
 components/           Layout + presentational UI
 pages/
@@ -83,4 +83,5 @@ python scripts/ingest_igdb.py --min-rating-count 8  # ~10k main games
 - ~~Wire the Turnstile-gated claim form~~ — done (`functions/api/claim.ts`).
 - ~~Implement `ingest_steam.py`~~ — done (appdetails / appreviews / SteamSpy, resumable).
 - Run the full Steam crawl, then the enrichment batch through `enrich_batch.py` (Claude Batch API).
-- Implement `compute_kin.py` + `export_json.py`, then regenerate `data/export/`.
+- ~~Implement `compute_kin.py` + `export_json.py`~~ — done (NetworkX similarity + match/hidden-gem kin).
+- Once enrichment lands: `compute_kin.py` → `export_json.py`, commit the regenerated `data/export/`.

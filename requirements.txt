@@ -1,0 +1,12 @@
+# Python pipeline dependencies.
+#
+# Most scripts (init_db, ingest_igdb, ingest_steam, export_json) are stdlib-only
+# and need nothing here. Two steps use third-party packages:
+#
+#   enrich_batch.py  -> anthropic  (Claude Batch API)
+#   compute_kin.py   -> networkx   (weighted similarity graph)
+#
+#     pip install -r requirements.txt
+#
+anthropic>=0.69
+networkx>=3.0
