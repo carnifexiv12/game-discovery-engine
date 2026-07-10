@@ -289,11 +289,10 @@ def submit_batch(conn, client, games, system, schema, model) -> str:
                     {"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}
                 ],
                 "messages": [{"role": "user", "content": user_content(g, corpus_for(conn, g["igdb_id"]))}],
-                "thinking": {"type": "adaptive"},
-                "output_config": {
-                    "format": {"type": "json_schema", "schema": schema},
-                    "effort": "low",
-                },
+                # Structured output only — portable across tiers. No thinking/
+                # effort: they 400 on Haiku 4.5 (the default), and rubric
+                # classification against a fixed menu doesn't need them.
+                "output_config": {"format": {"type": "json_schema", "schema": schema}},
             },
         }
         for g in games
