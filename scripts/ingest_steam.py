@@ -278,9 +278,19 @@ def run_pass(conn, endpoint: str, appids: list[int], game_ids_by_appid, *, sleep
     print(f"[{endpoint}] {already}/{total} already cached; {len(todo)} to fetch "
           f"(est {fmt_duration(len(todo) * per_item)}).")
 
-    ok_count = tomb_count = 0
+    ok_count = tomb_count = skipped = 0
     for i, appid in enumerate(todo, start=1):
-        ok, payload = fetch(endpoint, appid)
+        try:
+            ok, payload = fetch(endpoint, appid)
+        except Exception as err:
+            # A sustained error survived fetch()'s own retries. Don't crash the
+            # whole crawl over one item — skip it (uncached, so it retries next
+            # run) and keep going.
+            print(f"  [{endpoint}] {appid} skipped after retries ({err}); "
+                  "will retry next run", file=sys.stderr)
+            skipped += 1
+            time.sleep(sleep)
+            continue
         cache_put(conn, appid, endpoint, ok, payload)
         if ok:
             derive_one(conn, appid, endpoint, payload, game_ids_by_appid.get(appid, []))
@@ -293,7 +303,8 @@ def run_pass(conn, endpoint: str, appids: list[int], game_ids_by_appid, *, sleep
             print(f"  [{endpoint}] {done}/{total}, {eta} remaining "
                   f"({ok_count} ok, {tomb_count} tombstoned)")
         time.sleep(sleep)
-    print(f"[{endpoint}] done: {ok_count} fetched, {tomb_count} tombstoned this run.")
+    tail = f", {skipped} skipped (retry next run)" if skipped else ""
+    print(f"[{endpoint}] done: {ok_count} fetched, {tomb_count} tombstoned this run{tail}.")
 
 
 def derive_all(conn, endpoint: str, game_ids_by_appid) -> None:
