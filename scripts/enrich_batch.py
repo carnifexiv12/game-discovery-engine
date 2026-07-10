@@ -47,7 +47,7 @@ DEFAULT_DB = REPO_ROOT / "data" / "gde.sqlite"
 VOCAB_PATH = REPO_ROOT / "data" / "vocabulary.json"
 ENV_PATH = REPO_ROOT / ".env"
 
-MODEL = "claude-opus-4-8"
+MODEL = "claude-haiku-4-5"  # right tier for rubric classification; --model to upgrade
 MAX_TOKENS = 8192
 WEIGHT_THRESHOLD = 0.15      # below this, omit (matches the vocabulary rubric)
 BATCH_CHUNK = 2000           # games per batch submission (API cap is 100k/256MB)
@@ -306,8 +306,9 @@ def main() -> None:
     parser.add_argument("--collect-only", action="store_true", help="Only drain in-flight batches; submit nothing.")
     parser.add_argument(
         "--model", default=MODEL,
-        help=f"Claude model (default {MODEL}). A cheaper tier — claude-sonnet-5 or "
-             "claude-haiku-4-5 — cuts cost several-fold for this classification task.",
+        help=f"Claude model (default {MODEL}, the right tier for rubric "
+             "classification). Upgrade with claude-sonnet-5 or claude-opus-4-8 "
+             "if calibration shows the classification needs it.",
     )
     args = parser.parse_args()
 
