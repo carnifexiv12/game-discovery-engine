@@ -38,6 +38,9 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DB = REPO_ROOT / "data" / "gde.sqlite"
 DEFAULT_OUT = REPO_ROOT / "data" / "export"
+VOCAB_PATH = REPO_ROOT / "data" / "vocabulary.json"
+PUBLIC_DIR = REPO_ROOT / "public"        # search-index.json is a served static asset
+KEYWORD_MIN_WEIGHT = 0.4                  # a trait feeds search keywords when >= this
 
 SITE = {
     "name": "Game Discovery Engine",
@@ -72,6 +75,14 @@ def load_catalog(conn):
     return {r[0]: (r[1], r[2]) for r in conn.execute(
         "SELECT id, name, group_name FROM characteristics"
     )}
+
+
+def load_trait_hints() -> dict[str, list[str]]:
+    """trait id -> steam_tag_hints — search aliases so a 'feeling' term like
+    'roguelike' matches Run-Based games even though no trait is named that."""
+    vocab = json.loads(VOCAB_PATH.read_text(encoding="utf-8"))
+    return {t["id"]: t.get("steam_tag_hints", [])
+            for group in vocab["groups"].values() for t in group["traits"]}
 
 
 def load_game_traits(conn, catalog):
@@ -275,20 +286,35 @@ def main() -> None:
         write_json(out_dir / "games.json", {"site": SITE, "games": games})
         write_json(out_dir / "kin.json", {"kin": kin, "hidden_gems": hidden})
 
+        hints = load_trait_hints()
+
+        def keywords_for(gid: int) -> list[str]:
+            # Trait names + their steam_tag_hints, for traits at least "clearly
+            # present" — the searchable "feeling" surface. Deduped case-insensitively.
+            terms: dict[str, str] = {}
+            for t in traits_by_id[gid]:
+                if t["weight"] < KEYWORD_MIN_WEIGHT:
+                    continue
+                for term in [t["name"], *hints.get(t["id"], [])]:
+                    terms.setdefault(term.lower(), term)
+            return list(terms.values())
+
         index = sorted(
             (
                 {"slug": r["slug"], "title": r["title"],
-                 "traits": [t["name"] for t in traits_by_id[r["igdb_id"]][:5]]}
+                 "traits": [t["name"] for t in traits_by_id[r["igdb_id"]][:5]],
+                 "keywords": keywords_for(r["igdb_id"])}
                 for r in enriched
             ),
             key=lambda e: e["slug"],
         )
-        write_json(out_dir / "search-index.json", index)
+        PUBLIC_DIR.mkdir(parents=True, exist_ok=True)
+        write_json(PUBLIC_DIR / "search-index.json", index)
 
         print(f"Exported {len(games)} games, "
               f"{sum(len(v) for v in kin.values())} match + "
-              f"{sum(len(v) for v in hidden.values())} hidden-gem kin edges, "
-              f"search index of {len(index)} -> {out_dir}")
+              f"{sum(len(v) for v in hidden.values())} hidden-gem kin edges to {out_dir}; "
+              f"search index of {len(index)} -> {PUBLIC_DIR / 'search-index.json'}")
     finally:
         conn.close()
 

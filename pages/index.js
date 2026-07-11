@@ -1,4 +1,5 @@
 import Layout from "../components/Layout";
+import SearchBox from "../components/SearchBox";
 import { GameCard, JsonLd } from "../components/ui";
 import { getAllGames, getSiteMeta } from "../lib/data";
 
@@ -50,28 +51,14 @@ export default function Home({ site, games, total }) {
         <h1>{site.name}</h1>
         <p className="lede">{site.description}</p>
 
-        <form
-          className="searchbar"
-          onSubmit={(e) => e.preventDefault()}
-          role="search"
-          aria-label="Search games (coming soon)"
-        >
-          <input
-            type="text"
-            placeholder="Search a game or a feeling…"
-            aria-label="Search"
-            disabled
-          />
-          <button type="submit" disabled>
-            Search
-          </button>
-        </form>
+        <SearchBox />
         <p className="hint">
-          Search is coming soon — a few featured picks from {total.toLocaleString()} games below.
+          Search {total.toLocaleString()} games by title — or by a feeling, like
+          {" "}“cozy”, “roguelike”, or “melancholy”.
         </p>
       </section>
 
-      <p className="section-label">Featured games</p>
+      <p className="section-label" id="featured">Featured games</p>
       <div className="card-grid">
         {games.map((g) => (
           <GameCard key={g.slug} game={g} />
