@@ -40,7 +40,113 @@ DEFAULT_DB = REPO_ROOT / "data" / "gde.sqlite"
 DEFAULT_OUT = REPO_ROOT / "data" / "export"
 VOCAB_PATH = REPO_ROOT / "data" / "vocabulary.json"
 PUBLIC_DIR = REPO_ROOT / "public"        # search-index.json is a served static asset
-KEYWORD_MIN_WEIGHT = 0.4                  # a trait feeds search keywords when >= this
+TOP_TRAITS_PER_GAME = 15                  # weight vector per game in the search index
+WEIGHT_QUANT = 255                        # weights quantized to 1 byte (0..255) in the index
+
+# Hand-tuned umbrella search terms -> vocabulary trait ids. No single trait is
+# named "rpg" or "shooter", so these map a genre/feeling word to the trait
+# CLUSTER that defines it. Merged into each trait's alias list at build time
+# (alongside the deterministic name + steam_tag_hints). Unknown ids are dropped
+# with a warning, so a vocab rename can't silently break search.
+GENRE_ALIASES = {
+    # genres
+    "rpg": ["struct_xp_levels", "mech_character_builds", "mech_class_system",
+            "mech_party_management", "struct_skill_tree"],
+    "role-playing": ["struct_xp_levels", "mech_character_builds", "mech_class_system"],
+    "jrpg": ["struct_xp_levels", "mech_turn_based_combat", "mech_party_management", "aes_anime"],
+    "crpg": ["mech_dialogue_trees", "mech_party_management", "mech_skill_checks", "aes_isometric"],
+    "shooter": ["mech_gunplay", "mech_cover_shooter", "mech_twin_stick", "mech_bullet_hell"],
+    "fps": ["mech_gunplay", "aes_first_person_view"],
+    "platformer": ["mech_platforming", "mech_precision_platforming"],
+    "metroidvania": ["struct_metroidvania"],
+    "roguelike": ["struct_run_based", "struct_meta_progression", "mech_permadeath"],
+    "roguelite": ["struct_run_based", "struct_meta_progression"],
+    "deckbuilder": ["mech_deckbuilding", "mech_card_battler"],
+    "deckbuilding": ["mech_deckbuilding", "mech_card_battler"],
+    "strategy": ["mech_rts", "mech_4x", "mech_grand_strategy", "mech_tactical_combat"],
+    "rts": ["mech_rts"],
+    "4x": ["mech_4x"],
+    "tactics": ["mech_tactical_combat", "struct_grid_map"],
+    "tactical": ["mech_tactical_combat"],
+    "fighting": ["mech_fighting_combos"],
+    "fighter": ["mech_fighting_combos"],
+    "racing": ["mech_vehicular"],
+    "driving": ["mech_vehicular"],
+    "survival": ["mech_survival_needs", "theme_survival"],
+    "puzzle": ["mech_environmental_puzzles", "mech_logic_puzzles", "mech_physics_puzzles",
+               "mech_spatial_puzzles"],
+    "stealth": ["mech_stealth", "mech_social_stealth"],
+    "sandbox": ["struct_sandbox", "mech_freeform_building"],
+    "open world": ["struct_open_world"],
+    "openworld": ["struct_open_world"],
+    "soulslike": ["mech_soulslike_combat"],
+    "souls": ["mech_soulslike_combat"],
+    "hack and slash": ["mech_hack_and_slash"],
+    "battle royale": ["struct_battle_royale"],
+    "mmo": ["struct_mmo"],
+    "farming": ["mech_farming"],
+    "farm": ["mech_farming"],
+    "city builder": ["mech_city_building"],
+    "tower defense": ["mech_tower_defense"],
+    "rhythm": ["mech_rhythm"],
+    "sports": ["theme_sports"],
+    "horror": ["theme_horror", "theme_psychological_horror", "tone_horrific", "tone_dread"],
+    "detective": ["theme_detective"],
+    "mystery": ["theme_mystery", "theme_detective"],
+    "co-op": ["struct_online_coop", "struct_local_coop", "struct_coop_campaign"],
+    "coop": ["struct_online_coop", "struct_local_coop", "struct_coop_campaign"],
+    "multiplayer": ["struct_competitive_pvp", "struct_online_coop", "struct_team_based"],
+    "pvp": ["struct_competitive_pvp"],
+    # aesthetics / retro
+    "retro": ["aes_pixel_art", "aes_retro_3d", "aes_chiptune"],
+    "pixel": ["aes_pixel_art"],
+    "pixel art": ["aes_pixel_art"],
+    "8-bit": ["aes_pixel_art", "aes_chiptune"],
+    "low poly": ["aes_low_poly"],
+    "hand drawn": ["aes_hand_drawn"],
+    "anime": ["aes_anime"],
+    "cartoon": ["aes_cel_shaded"],
+    "realistic": ["aes_photorealistic"],
+    "noir": ["aes_noir"],
+    "cyberpunk": ["theme_cyberpunk"],
+    "steampunk": ["theme_steampunk"],
+    # feelings / tone
+    "melancholy": ["tone_melancholic"],
+    "melancholic": ["tone_melancholic"],
+    "sad": ["tone_melancholic", "tone_somber", "tone_bittersweet"],
+    "cozy": ["tone_cozy", "tone_tender"],
+    "comfy": ["tone_cozy"],
+    "wholesome": ["tone_cozy", "tone_tender"],
+    "relaxing": ["tone_serene", "tone_cozy"],
+    "chill": ["tone_serene", "tone_cozy"],
+    "tense": ["tone_tense"],
+    "scary": ["tone_dread", "tone_horrific", "tone_uncanny"],
+    "spooky": ["tone_dread", "tone_uncanny"],
+    "funny": ["tone_absurdist", "tone_irreverent", "tone_playful"],
+    "comedy": ["tone_absurdist", "tone_irreverent"],
+    "hopeful": ["tone_hopeful"],
+    "dark": ["tone_grim", "tone_bleak", "aes_gritty"],
+    "grim": ["tone_grim", "tone_bleak"],
+    "epic": ["tone_triumphant", "tone_sublime"],
+    "lonely": ["tone_lonely", "theme_isolation"],
+    "atmospheric": ["tone_contemplative", "tone_lonely", "aes_ambient_score"],
+    "beautiful": ["aes_painterly", "aes_watercolor"],
+    # themes
+    "sci-fi": ["theme_science_fiction", "theme_space_opera"],
+    "scifi": ["theme_science_fiction", "theme_space_opera"],
+    "science fiction": ["theme_science_fiction"],
+    "fantasy": ["theme_high_fantasy", "theme_dark_fantasy"],
+    "medieval": ["theme_medieval"],
+    "post-apocalyptic": ["theme_post_apocalyptic"],
+    "apocalypse": ["theme_post_apocalyptic"],
+    "zombie": ["theme_zombie"],
+    "war": ["theme_military", "theme_war_cost"],
+    "space": ["theme_space_opera", "theme_hard_sci_fi"],
+    "historical": ["theme_historical"],
+    "mythology": ["theme_mythology"],
+    "pirate": ["theme_pirate"],
+    "western": ["theme_western"],
+}
 
 SITE = {
     "name": "Game Discovery Engine",
@@ -233,6 +339,44 @@ def top_game_ids(conn, n: int) -> set:
     return {r[0] for r in rows}
 
 
+def build_search_index(enriched, traits_by_id, catalog, hints) -> dict:
+    """Two-tier search index: a trait table (id, name, aliases for token->trait
+    mapping) and per-game sparse weight vectors (top-15 traits, quantized to a
+    byte). Aliases = trait name + steam_tag_hints + hand-tuned umbrella terms."""
+    genre_by_trait: dict[str, list[str]] = {}
+    dropped = set()
+    for term, ids in GENRE_ALIASES.items():
+        for tid in ids:
+            if tid in catalog:
+                genre_by_trait.setdefault(tid, []).append(term)
+            else:
+                dropped.add(tid)
+    if dropped:
+        print(f"  warning: {len(dropped)} alias trait ids not in vocab: {sorted(dropped)}")
+
+    used = sorted({t["id"] for r in enriched for t in traits_by_id[r["igdb_id"]]})
+    idx_of = {tid: i for i, tid in enumerate(used)}
+    traits_out = []
+    for tid in used:
+        name = catalog[tid][0]
+        aliases = {name.lower()}
+        aliases.update(h.lower() for h in hints.get(tid, []))
+        aliases.update(genre_by_trait.get(tid, []))
+        traits_out.append({"id": tid, "name": name, "aliases": sorted(aliases)})
+
+    games_out = []
+    for r in enriched:
+        ts = traits_by_id[r["igdb_id"]][:TOP_TRAITS_PER_GAME]  # already weight desc
+        games_out.append({
+            "slug": r["slug"],
+            "title": r["title"],
+            "t": [idx_of[t["id"]] for t in ts],
+            "w": [max(1, round(t["weight"] * WEIGHT_QUANT)) for t in ts],
+        })
+    games_out.sort(key=lambda g: g["slug"])
+    return {"traits": traits_out, "games": games_out}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Export gde.sqlite to data/export/*.json.")
     parser.add_argument("--db", default=str(DEFAULT_DB))
@@ -286,35 +430,15 @@ def main() -> None:
         write_json(out_dir / "games.json", {"site": SITE, "games": games})
         write_json(out_dir / "kin.json", {"kin": kin, "hidden_gems": hidden})
 
-        hints = load_trait_hints()
-
-        def keywords_for(gid: int) -> list[str]:
-            # Trait names + their steam_tag_hints, for traits at least "clearly
-            # present" — the searchable "feeling" surface. Deduped case-insensitively.
-            terms: dict[str, str] = {}
-            for t in traits_by_id[gid]:
-                if t["weight"] < KEYWORD_MIN_WEIGHT:
-                    continue
-                for term in [t["name"], *hints.get(t["id"], [])]:
-                    terms.setdefault(term.lower(), term)
-            return list(terms.values())
-
-        index = sorted(
-            (
-                {"slug": r["slug"], "title": r["title"],
-                 "traits": [t["name"] for t in traits_by_id[r["igdb_id"]][:5]],
-                 "keywords": keywords_for(r["igdb_id"])}
-                for r in enriched
-            ),
-            key=lambda e: e["slug"],
-        )
+        search_index = build_search_index(enriched, traits_by_id, catalog, load_trait_hints())
         PUBLIC_DIR.mkdir(parents=True, exist_ok=True)
-        write_json(PUBLIC_DIR / "search-index.json", index)
+        write_json(PUBLIC_DIR / "search-index.json", search_index)
 
         print(f"Exported {len(games)} games, "
               f"{sum(len(v) for v in kin.values())} match + "
               f"{sum(len(v) for v in hidden.values())} hidden-gem kin edges to {out_dir}; "
-              f"search index of {len(index)} -> {PUBLIC_DIR / 'search-index.json'}")
+              f"search index: {len(search_index['traits'])} traits, "
+              f"{len(search_index['games'])} games -> {PUBLIC_DIR / 'search-index.json'}")
     finally:
         conn.close()
 

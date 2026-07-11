@@ -181,13 +181,35 @@ a:hover {
 .search-results .r-title {
   font-weight: 600;
   color: var(--text);
-}
-.search-results .r-traits {
-  color: var(--text-faint);
-  font-size: 0.8rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.search-results .r-chips {
+  display: flex;
+  gap: 5px;
+  flex-shrink: 0;
+  flex-wrap: nowrap;
+}
+.search-results .chip {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 550;
+  white-space: nowrap;
+}
+.search-results .search-divider {
+  cursor: default;
+  padding: 8px 12px 4px;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+}
+.search-results .search-divider:hover {
+  background: none;
 }
 .search-results .search-empty {
   cursor: default;
