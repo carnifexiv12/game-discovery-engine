@@ -63,6 +63,22 @@ def load_vectors(conn: sqlite3.Connection) -> dict[int, dict[str, float]]:
     return dict(vectors)
 
 
+def filter_common(vectors, max_df: int):
+    """Drop traits present on more than max_df games from the similarity vectors.
+
+    Ubiquitous traits (e.g. Single-Player) carry almost no discriminative signal
+    and are the source of the O(df^2) pairwise blow-up. Removing them makes the
+    graph both tractable and sharper. Returns (sim_vectors, dropped_trait_ids)."""
+    df: dict[str, int] = defaultdict(int)
+    for vec in vectors.values():
+        for trait in vec:
+            df[trait] += 1
+    common = {t for t, c in df.items() if c > max_df}
+    sim = {g: {t: w for t, w in vec.items() if t not in common} for g, vec in vectors.items()}
+    sim = {g: v for g, v in sim.items() if v}  # drop games left with no distinctive trait
+    return sim, common
+
+
 def load_review_signal(conn: sqlite3.Connection) -> dict[int, tuple[float, int]]:
     """Map igdb game_id -> (positive_pct, review_count) from cached appreviews.
 
@@ -162,6 +178,9 @@ def main() -> None:
     parser.add_argument("--top-n", type=int, default=12, help="Closest matches per game.")
     parser.add_argument("--gems", type=int, default=3, help="Hidden-gem kin per game.")
     parser.add_argument("--min-sim", type=float, default=0.05, help="Minimum cosine to record an edge.")
+    parser.add_argument("--max-df", type=int, default=1000,
+                        help="Exclude traits on more than this many games from the "
+                             "similarity graph (too common to discriminate).")
     parser.add_argument("--gem-pct", type=float, default=0.85, help="Min positive fraction for a hidden gem.")
     parser.add_argument("--gem-max-reviews", type=int, default=5000, help="Max review count for a hidden gem.")
     parser.add_argument("--gem-min-reviews", type=int, default=50, help="Min review count (filters noise).")
@@ -178,8 +197,13 @@ def main() -> None:
             print("No game_characteristics yet — nothing to compute. Run enrich_batch.py first.")
         names = trait_names(conn)
         review = load_review_signal(conn)
-        graph = build_graph(vectors, args.min_sim)
-        print(f"{graph.number_of_nodes()} games, {graph.number_of_edges()} similarity edges.")
+        # Similarity runs on the discriminative sub-vectors (over-common traits
+        # dropped); shared_trait_names below also uses these so blurbs highlight
+        # distinctive overlap, not "Single-Player".
+        sim_vectors, common = filter_common(vectors, args.max_df)
+        graph = build_graph(sim_vectors, args.min_sim)
+        print(f"{graph.number_of_nodes()} games, {graph.number_of_edges()} similarity "
+              f"edges ({len(common)} over-common traits excluded).")
 
         def is_gem(g: int) -> bool:
             sig = review.get(g)
@@ -194,7 +218,7 @@ def main() -> None:
             ranked = neighbours_by_similarity(graph, game)
 
             for rank, (other, sim) in enumerate(ranked[: args.top_n]):
-                shared = shared_trait_names(vectors, names, game, other)
+                shared = shared_trait_names(sim_vectors, names, game, other)
                 conn.execute(
                     "INSERT OR REPLACE INTO kin (game_id, kin_game_id, kind, rank, score, blurb) "
                     "VALUES (?, ?, 'match', ?, ?, ?)",
@@ -204,7 +228,7 @@ def main() -> None:
 
             gems = [(o, s) for o, s in ranked if is_gem(o)][: args.gems]
             for rank, (other, sim) in enumerate(gems):
-                shared = shared_trait_names(vectors, names, game, other)
+                shared = shared_trait_names(sim_vectors, names, game, other)
                 pct, count = review[other]
                 conn.execute(
                     "INSERT OR REPLACE INTO kin (game_id, kin_game_id, kind, rank, score, blurb) "
