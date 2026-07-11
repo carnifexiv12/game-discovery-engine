@@ -386,12 +386,14 @@ def main() -> None:
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     try:
-        from anthropic import APIStatusError
+        from anthropic import APIError
 
         ensure_schema(conn)
         vocab = load_vocab()
         valid_ids = set(all_trait_ids(vocab))
-        client = Anthropic()  # resolves ANTHROPIC_API_KEY / .env / ant profile
+        # Extra SDK retries so a transient 5xx (e.g. a 502 gateway blip) doesn't
+        # abort a long run; a persistent failure still halts gracefully below.
+        client = Anthropic(max_retries=8)
 
         # Harmonize any earlier-threshold rows (e.g. a 0.15 calibration) to the
         # current threshold — free, keeps every game on the same emit bar.
@@ -400,6 +402,7 @@ def main() -> None:
 
         total_usage = {"input": 0, "cache_write": 0, "cache_read": 0, "output": 0}
         halted = False
+        halt_reason = None
 
         def add(u):
             for k in total_usage:
@@ -412,7 +415,8 @@ def main() -> None:
             for batch_id in pending:
                 u, hit = collect_batch(conn, client, valid_ids, batch_id)
                 add(u)
-                halted = halted or hit
+                if hit:
+                    halted, halt_reason = True, "insufficient credit"
 
         if not args.collect_only and not halted:
             # 2. Enqueue games that still need enrichment.
@@ -430,16 +434,16 @@ def main() -> None:
                         u, hit = collect_batch(conn, client, valid_ids, batch_id)
                         add(u)
                         if hit:
-                            halted = True
+                            halted, halt_reason = True, "insufficient credit"
                             break
-                except APIStatusError as exc:
-                    # Clean halt on a billing/credit error: the in-flight chunk was
-                    # already collected above; stop submitting more.
-                    if is_credit_error(exc):
-                        halted = True
-                        print(f"Halting on API error: {exc}", file=sys.stderr)
-                    else:
-                        raise
+                except APIError as exc:
+                    # Any API error (credit, or a transient 5xx that survived the
+                    # retries) is a graceful, resumable halt — the in-flight chunk
+                    # was already collected above; stop submitting more.
+                    halted = True
+                    halt_reason = ("insufficient credit" if is_credit_error(exc)
+                                   else f"an API error ({type(exc).__name__})")
+                    print(f"Halting on {halt_reason}: {str(exc)[:160]}", file=sys.stderr)
 
         # 3. Summary — enriched vs remaining, dollars consumed this run.
         enrichable = conn.execute(
@@ -454,9 +458,9 @@ def main() -> None:
               f"({enrichable - enriched} remaining), {chars} trait assignments; "
               f"~${estimate_cost(total_usage):.2f} consumed this run.")
         if halted:
-            print("HALTED on insufficient credit. Top up, then re-run the same "
-                  "command — it resumes from the enrich_batch table and skips "
-                  "already-enriched games (zero re-billing).")
+            print(f"HALTED on {halt_reason}. Re-run the same command to resume "
+                  "from the enrich_batch table — already-enriched games are "
+                  "skipped (zero re-billing). Top up credit first if that was the cause.")
     finally:
         conn.close()
 
