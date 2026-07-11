@@ -111,6 +111,20 @@ def trait_names(conn: sqlite3.Connection) -> dict[str, str]:
     return dict(conn.execute("SELECT id, name FROM characteristics"))
 
 
+def top_game_ids(conn: sqlite3.Connection, n: int) -> set[int]:
+    """The n most-reviewed enriched games (the publishable subset)."""
+    rows = conn.execute(
+        "SELECT g.igdb_id FROM games g JOIN (SELECT appid, "
+        "json_extract(payload, '$.query_summary.total_reviews') AS rc "
+        "FROM steam_cache WHERE endpoint = 'appreviews' AND ok = 1) r "
+        "ON r.appid = g.steam_appid WHERE EXISTS "
+        "(SELECT 1 FROM game_characteristics gc WHERE gc.game_id = g.igdb_id) "
+        "ORDER BY CAST(rc AS INTEGER) DESC, g.igdb_id LIMIT ?",
+        (n,),
+    ).fetchall()
+    return {r[0] for r in rows}
+
+
 def similarity_edges(vectors: dict[int, dict[str, float]], min_sim: float):
     """Yield (a, b, cosine) for every pair sharing >=1 trait, above min_sim."""
     norms = {g: math.sqrt(sum(w * w for w in vec.values())) for g, vec in vectors.items()}
@@ -181,6 +195,9 @@ def main() -> None:
     parser.add_argument("--max-df", type=int, default=1000,
                         help="Exclude traits on more than this many games from the "
                              "similarity graph (too common to discriminate).")
+    parser.add_argument("--top", type=int, default=None,
+                        help="Restrict to the top-N most-reviewed games so kin are "
+                             "computed within the publishable subset (dense, resolvable).")
     parser.add_argument("--gem-pct", type=float, default=0.85, help="Min positive fraction for a hidden gem.")
     parser.add_argument("--gem-max-reviews", type=int, default=5000, help="Max review count for a hidden gem.")
     parser.add_argument("--gem-min-reviews", type=int, default=50, help="Min review count (filters noise).")
@@ -197,6 +214,10 @@ def main() -> None:
             print("No game_characteristics yet — nothing to compute. Run enrich_batch.py first.")
         names = trait_names(conn)
         review = load_review_signal(conn)
+        if args.top:
+            keep = top_game_ids(conn, args.top)
+            vectors = {g: v for g, v in vectors.items() if g in keep}
+            print(f"Restricted to the top {len(vectors)} games by review count.")
         # Similarity runs on the discriminative sub-vectors (over-common traits
         # dropped); shared_trait_names below also uses these so blurbs highlight
         # distinctive overlap, not "Single-Player".

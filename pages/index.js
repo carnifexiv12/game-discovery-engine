@@ -3,15 +3,28 @@ import { GameCard, JsonLd } from "../components/ui";
 import { getAllGames, getSiteMeta } from "../lib/data";
 
 export async function getStaticProps() {
+  // Feature a slice on the landing page — embedding the whole catalog here
+  // makes a multi-MB page. Cards only need a handful of fields, so project down.
+  const all = getAllGames();
+  const games = all.slice(0, 60).map((g) => ({
+    slug: g.slug,
+    title: g.title,
+    year: g.year,
+    developer: g.developer,
+    tagline: g.tagline,
+    steam_appid: g.steam_appid,
+    cover_url: g.cover_url,
+  }));
   return {
     props: {
       site: getSiteMeta(),
-      games: getAllGames(),
+      games,
+      total: all.length,
     },
   };
 }
 
-export default function Home({ site, games }) {
+export default function Home({ site, games, total }) {
   const websiteLd = {
     "@context": "https://schema.org",
     "@type": "WebSite",
@@ -53,9 +66,12 @@ export default function Home({ site, games }) {
             Search
           </button>
         </form>
-        <p className="hint">Search is a stub for now — browse the sample set below.</p>
+        <p className="hint">
+          Search is coming soon — a few featured picks from {total.toLocaleString()} games below.
+        </p>
       </section>
 
+      <p className="section-label">Featured games</p>
       <div className="card-grid">
         {games.map((g) => (
           <GameCard key={g.slug} game={g} />

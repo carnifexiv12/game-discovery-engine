@@ -208,10 +208,27 @@ def write_json(path: Path, data) -> None:
     )
 
 
+def top_game_ids(conn, n: int) -> set:
+    """The n most-reviewed enriched games — the publishable subset."""
+    rows = conn.execute(
+        "SELECT g.igdb_id FROM games g JOIN (SELECT appid, "
+        "json_extract(payload, '$.query_summary.total_reviews') AS rc "
+        "FROM steam_cache WHERE endpoint = 'appreviews' AND ok = 1) r "
+        "ON r.appid = g.steam_appid WHERE EXISTS "
+        "(SELECT 1 FROM game_characteristics gc WHERE gc.game_id = g.igdb_id) "
+        "ORDER BY CAST(rc AS INTEGER) DESC, g.igdb_id LIMIT ?",
+        (n,),
+    ).fetchall()
+    return {r[0] for r in rows}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Export gde.sqlite to data/export/*.json.")
     parser.add_argument("--db", default=str(DEFAULT_DB))
     parser.add_argument("--out", default=str(DEFAULT_OUT))
+    parser.add_argument("--top", type=int, default=None,
+                        help="Publish only the top-N most-reviewed games (kin filtered "
+                             "to the same set so every link resolves).")
     args = parser.parse_args()
 
     db_path, out_dir = Path(args.db), Path(args.out)
@@ -226,19 +243,26 @@ def main() -> None:
         traits_by_id = load_game_traits(conn, catalog)
         signal = load_review_signal(conn)
 
-        # Enriched games only, deterministic order (popularity desc, id asc).
+        # Publishable set: all enriched games, or the top-N by review count.
+        published = top_game_ids(conn, args.top) if args.top else set(traits_by_id)
+
+        # Enriched + published games, deterministic order (popularity desc, id asc).
         games_by_id = {r["igdb_id"]: r for r in conn.execute("SELECT * FROM games")}
-        enriched = [games_by_id[gid] for gid in traits_by_id if gid in games_by_id]
+        enriched = [games_by_id[gid] for gid in traits_by_id
+                    if gid in games_by_id and gid in published]
         enriched.sort(key=lambda r: (-(signal.get(r["igdb_id"], (0, 0))[1]), r["igdb_id"]))
 
         games = [game_object(r, traits_by_id[r["igdb_id"]], signal) for r in enriched]
 
-        # Kin, split by kind, deterministic by rank.
+        # Kin, split by kind, deterministic by rank. Both endpoints must be
+        # published so every link resolves.
         kin: dict[str, list] = {}
         hidden: dict[str, list] = {}
         has_kin = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='kin'")}
         if has_kin:
             for r in conn.execute("SELECT * FROM kin ORDER BY game_id, kind, rank"):
+                if r["game_id"] not in published or r["kin_game_id"] not in published:
+                    continue
                 src = games_by_id.get(r["game_id"])
                 if src is None:
                     continue
