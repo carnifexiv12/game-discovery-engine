@@ -49,9 +49,13 @@ ENV_PATH = REPO_ROOT / ".env"
 
 MODEL = "claude-haiku-4-5"  # right tier for rubric classification; --model to upgrade
 MAX_TOKENS = 8192
-WEIGHT_THRESHOLD = 0.15      # below this, omit (matches the vocabulary rubric)
-BATCH_CHUNK = 2000           # games per batch submission (API cap is 100k/256MB)
+WEIGHT_THRESHOLD = 0.25      # below this, omit (sparser, sharper profiles)
+BATCH_CHUNK = 1000           # games per batch; sequential chunks keep the cache warm
 POLL_SECONDS = 30
+
+# Haiku 4.5 batch $/MTok: base in 1.00 / out 5.00; batch = 50%; cache-write(1h) 2x
+# base, cache-read 0.1x base. Used only for a spend estimate in the run summary.
+PRICE = {"input": 0.50, "cache_write": 1.00, "cache_read": 0.05, "output": 2.50}
 
 GROUP_TITLES = {
     "tone": "TONE (emotional register)",
@@ -134,8 +138,9 @@ def system_prompt(vocab: dict) -> str:
         "(not how good the game is), and a one-sentence rationale grounded in the "
         "provided text.\n\n"
         "Weight bands:\n" + bands + "\n\n"
-        "Rules: emit a trait only if its weight is at least 0.15 (omit anything "
-        "fainter). Use the exact trait id from the menu. 'graded' traits are "
+        "Rules: emit a trait only if its weight is at least 0.25 (omit anything "
+        "fainter). Prefer a tight, high-signal set over a long one. Use the exact "
+        "trait id from the menu. 'graded' traits are "
         "intensity spectrums; 'binary' traits are present/absent — weight a binary "
         "trait by how central its system is. Respect the 'not to be confused with' "
         "notes. Do not invent traits.\n\n"
@@ -224,11 +229,44 @@ def open_batches(conn: sqlite3.Connection) -> list[str]:
     ).fetchall()]
 
 
-def write_results(conn: sqlite3.Connection, valid_ids: set[str], results) -> tuple[int, int]:
+def is_credit_error(obj) -> bool:
+    """True if an exception or a batch result error looks like a billing/credit halt."""
+    if obj is None:
+        return False
+    parts = [str(obj)]
+    for attr in ("message", "type"):
+        value = getattr(obj, attr, None)
+        if value:
+            parts.append(str(value))
+    text = " ".join(parts).lower()
+    return any(k in text for k in ("credit", "billing", "insufficient", "quota", "payment"))
+
+
+def estimate_cost(usage: dict) -> float:
+    return (
+        usage["input"] * PRICE["input"]
+        + usage["cache_write"] * PRICE["cache_write"]
+        + usage["cache_read"] * PRICE["cache_read"]
+        + usage["output"] * PRICE["output"]
+    ) / 1e6
+
+
+def write_results(conn: sqlite3.Connection, valid_ids: set[str], results):
+    """Returns (games, chars, usage, credit_hit). Writes succeeded games; a
+    credit-related error on any errored result flips credit_hit."""
     games = chars = 0
+    usage = {"input": 0, "cache_write": 0, "cache_read": 0, "output": 0}
+    credit_hit = False
     for entry in results:
         if entry.result.type != "succeeded":
+            if is_credit_error(getattr(entry.result, "error", None)):
+                credit_hit = True
             continue
+        u = entry.result.message.usage
+        usage["input"] += u.input_tokens
+        usage["output"] += u.output_tokens
+        usage["cache_write"] += getattr(u, "cache_creation_input_tokens", 0) or 0
+        usage["cache_read"] += getattr(u, "cache_read_input_tokens", 0) or 0
         try:
             game_id = int(entry.custom_id)
         except ValueError:
@@ -258,10 +296,11 @@ def write_results(conn: sqlite3.Connection, valid_ids: set[str], results) -> tup
         games += 1
         chars += len(rows)
     conn.commit()
-    return games, chars
+    return games, chars, usage, credit_hit
 
 
-def collect_batch(conn, client, valid_ids: set[str], batch_id: str) -> None:
+def collect_batch(conn, client, valid_ids: set[str], batch_id: str):
+    """Poll a batch to completion, write its results. Returns (usage, credit_hit)."""
     while True:
         batch = client.messages.batches.retrieve(batch_id)
         if batch.processing_status == "ended":
@@ -270,10 +309,13 @@ def collect_batch(conn, client, valid_ids: set[str], batch_id: str) -> None:
         print(f"  [{batch_id}] {batch.processing_status} "
               f"(done {counts.succeeded + counts.errored}/{counts.processing + counts.succeeded + counts.errored})")
         time.sleep(POLL_SECONDS)
-    games, chars = write_results(conn, valid_ids, client.messages.batches.results(batch_id))
+    games, chars, usage, credit_hit = write_results(
+        conn, valid_ids, client.messages.batches.results(batch_id))
     conn.execute("UPDATE enrich_batch SET collected = 1 WHERE batch_id = ?", (batch_id,))
     conn.commit()
-    print(f"  [{batch_id}] collected: {games} games, {chars} trait assignments.")
+    print(f"  [{batch_id}] collected: {games} games, {chars} trait assignments"
+          f"{' (credit error seen)' if credit_hit else ''}.")
+    return usage, credit_hit
 
 
 def submit_batch(conn, client, games, system, schema, model) -> str:
@@ -286,7 +328,10 @@ def submit_batch(conn, client, games, system, schema, model) -> str:
                 "model": model,
                 "max_tokens": MAX_TOKENS,
                 "system": [
-                    {"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}
+                    # 1h TTL keeps the ~14k-token vocabulary prefix cached across
+                    # the sequential chunks (default 5min would expire between them).
+                    {"type": "text", "text": system,
+                     "cache_control": {"type": "ephemeral", "ttl": "1h"}}
                 ],
                 "messages": [{"role": "user", "content": user_content(g, corpus_for(conn, g["igdb_id"]))}],
                 # Structured output only — portable across tiers. No thinking/
@@ -324,6 +369,8 @@ def main() -> None:
              "classification). Upgrade with claude-sonnet-5 or claude-opus-4-8 "
              "if calibration shows the classification needs it.",
     )
+    parser.add_argument("--chunk-size", type=int, default=BATCH_CHUNK,
+                        help=f"Games per batch (default {BATCH_CHUNK}); sequential chunks keep the cache warm.")
     args = parser.parse_args()
 
     load_env(ENV_PATH)
@@ -339,39 +386,77 @@ def main() -> None:
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     try:
+        from anthropic import APIStatusError
+
         ensure_schema(conn)
         vocab = load_vocab()
         valid_ids = set(all_trait_ids(vocab))
         client = Anthropic()  # resolves ANTHROPIC_API_KEY / .env / ant profile
 
-        # 1. Drain any batches from a prior interrupted run.
+        # Harmonize any earlier-threshold rows (e.g. a 0.15 calibration) to the
+        # current threshold — free, keeps every game on the same emit bar.
+        conn.execute("DELETE FROM game_characteristics WHERE weight < ?", (WEIGHT_THRESHOLD,))
+        conn.commit()
+
+        total_usage = {"input": 0, "cache_write": 0, "cache_read": 0, "output": 0}
+        halted = False
+
+        def add(u):
+            for k in total_usage:
+                total_usage[k] += u[k]
+
+        # 1. Drain any batches from a prior interrupted run (resume, no re-billing).
         pending = open_batches(conn)
         if pending:
             print(f"Collecting {len(pending)} in-flight batch(es)…")
             for batch_id in pending:
-                collect_batch(conn, client, valid_ids, batch_id)
+                u, hit = collect_batch(conn, client, valid_ids, batch_id)
+                add(u)
+                halted = halted or hit
 
-        if args.collect_only:
-            return
+        if not args.collect_only and not halted:
+            # 2. Enqueue games that still need enrichment.
+            games = games_to_enrich(conn, force=args.force, limit=args.limit)
+            if not games:
+                print("Nothing to enrich.")
+            else:
+                print(f"Enriching {len(games)} games with {args.model}, "
+                      f"{args.chunk_size}/chunk (sequential, batch)…")
+                system = system_prompt(vocab)
+                schema = build_schema(sorted(valid_ids))
+                try:
+                    for chunk in chunked(games, args.chunk_size):
+                        batch_id = submit_batch(conn, client, chunk, system, schema, args.model)
+                        u, hit = collect_batch(conn, client, valid_ids, batch_id)
+                        add(u)
+                        if hit:
+                            halted = True
+                            break
+                except APIStatusError as exc:
+                    # Clean halt on a billing/credit error: the in-flight chunk was
+                    # already collected above; stop submitting more.
+                    if is_credit_error(exc):
+                        halted = True
+                        print(f"Halting on API error: {exc}", file=sys.stderr)
+                    else:
+                        raise
 
-        # 2. Enqueue games that still need enrichment.
-        games = games_to_enrich(conn, force=args.force, limit=args.limit)
-        if not games:
-            print("Nothing to enrich.")
-            return
-        print(f"Enriching {len(games)} games with {args.model} (effort low, batch)…")
-
-        system = system_prompt(vocab)
-        schema = build_schema(sorted(valid_ids))
-        for chunk in chunked(games, BATCH_CHUNK):
-            batch_id = submit_batch(conn, client, chunk, system, schema, args.model)
-            collect_batch(conn, client, valid_ids, batch_id)
-
-        total = conn.execute("SELECT count(*) FROM game_characteristics").fetchone()[0]
+        # 3. Summary — enriched vs remaining, dollars consumed this run.
+        enrichable = conn.execute(
+            "SELECT count(*) FROM games g WHERE EXISTS "
+            "(SELECT 1 FROM corpus c WHERE c.game_id = g.igdb_id)"
+        ).fetchone()[0]
         enriched = conn.execute(
             "SELECT count(DISTINCT game_id) FROM game_characteristics"
         ).fetchone()[0]
-        print(f"Done. {enriched} games enriched, {total} trait assignments total.")
+        chars = conn.execute("SELECT count(*) FROM game_characteristics").fetchone()[0]
+        print(f"\nEnriched {enriched}/{enrichable} games "
+              f"({enrichable - enriched} remaining), {chars} trait assignments; "
+              f"~${estimate_cost(total_usage):.2f} consumed this run.")
+        if halted:
+            print("HALTED on insufficient credit. Top up, then re-run the same "
+                  "command — it resumes from the enrich_batch table and skips "
+                  "already-enriched games (zero re-billing).")
     finally:
         conn.close()
 
