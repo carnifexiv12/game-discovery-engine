@@ -219,6 +219,43 @@ a:hover {
 .search-results .search-empty:hover {
   background: none;
 }
+.search-results .search-seeall {
+  justify-content: center;
+  margin-top: 2px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 8px 8px;
+  color: var(--accent);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.search-results .search-seeall:hover {
+  background: var(--accent-soft);
+}
+
+/* ---- Full search results page ---- */
+.search-page {
+  padding-top: 12px;
+}
+.search-page .searchbox {
+  margin-bottom: 8px;
+}
+.search-heading {
+  margin: 22px 0 4px;
+  font-size: 1.4rem;
+  font-weight: 650;
+  color: var(--text);
+}
+.result-chips {
+  margin-top: 8px;
+}
+.result-chips .pill {
+  font-size: 0.72rem;
+}
+.search-empty-page {
+  padding: 28px 0;
+  color: var(--text-soft);
+}
 
 .card-grid {
   display: grid;

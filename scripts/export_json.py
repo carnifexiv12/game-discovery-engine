@@ -42,44 +42,73 @@ VOCAB_PATH = REPO_ROOT / "data" / "vocabulary.json"
 PUBLIC_DIR = REPO_ROOT / "public"        # search-index.json is a served static asset
 TOP_TRAITS_PER_GAME = 15                  # weight vector per game in the search index
 WEIGHT_QUANT = 255                        # weights quantized to 1 byte (0..255) in the index
+STRONG, WEAK = 1.0, 0.4                   # per-alias trait priority tiers
+HINT_PRIORITY = 0.7                       # steam_tag_hint aliases: real, but looser than a name
 
-# Hand-tuned umbrella search terms -> vocabulary trait ids. No single trait is
-# named "rpg" or "shooter", so these map a genre/feeling word to the trait
-# CLUSTER that defines it. Merged into each trait's alias list at build time
-# (alongside the deterministic name + steam_tag_hints). Unknown ids are dropped
-# with a warning, so a vocab rename can't silently break search.
-GENRE_ALIASES = {
-    # genres
-    "rpg": ["struct_xp_levels", "mech_character_builds", "mech_class_system",
-            "mech_party_management", "struct_skill_tree"],
-    "role-playing": ["struct_xp_levels", "mech_character_builds", "mech_class_system"],
+# The ~20 genre words that carry most real query volume, hand-tuned into STRONG
+# (core identity) and WEAK (adjacent) trait tiers. A game's score for a term is
+# its best trait weight TIMES that trait's priority, so ranking leans on core
+# identity: on "rpg shooter", Gunfire Reborn (Character Builds, strong) outranks
+# Team Fortress 2 (only Class System, weak). These tiers OVERRIDE any looser
+# hint-derived priority for the same term (see build_search_index).
+CORE_GENRES = {
+    "rpg": (["mech_character_builds", "struct_xp_levels", "mech_leveling_grind",
+             "mech_skill_checks", "struct_skill_tree", "mech_dialogue_trees"],
+            ["mech_class_system", "mech_party_management", "mech_loot", "mech_gear_upgrades"]),
+    "role-playing": (["mech_character_builds", "struct_xp_levels", "mech_leveling_grind",
+                      "mech_dialogue_trees", "mech_skill_checks"],
+                     ["mech_class_system", "mech_party_management"]),
+    "roguelike": (["struct_run_based", "struct_meta_progression"],
+                  ["mech_permadeath", "struct_procedural_levels"]),
+    "roguelite": (["struct_run_based", "struct_meta_progression"], ["mech_permadeath"]),
+    "shooter": (["mech_gunplay", "mech_twin_stick", "mech_bullet_hell", "mech_cover_shooter"],
+                ["mech_looter_shooter"]),
+    "fps": (["mech_gunplay", "aes_first_person_view"], []),
+    "horror": (["theme_horror", "theme_psychological_horror", "tone_horrific"],
+               ["tone_dread", "theme_cosmic_horror", "theme_gothic_horror", "aes_grotesque"]),
+    "puzzle": (["mech_logic_puzzles", "mech_environmental_puzzles", "mech_spatial_puzzles",
+                "mech_physics_puzzles"], []),
+    "platformer": (["mech_platforming", "mech_precision_platforming"], ["struct_metroidvania"]),
+    "metroidvania": (["struct_metroidvania"], ["struct_ability_gated"]),
+    "strategy": (["mech_rts", "mech_4x", "mech_grand_strategy", "mech_tactical_combat"],
+                 ["mech_tower_defense", "mech_auto_battler"]),
+    "deckbuilder": (["mech_deckbuilding", "mech_card_battler"], []),
+    "deckbuilding": (["mech_deckbuilding", "mech_card_battler"], []),
+    "survival": (["mech_survival_needs", "theme_survival"],
+                 ["mech_crafting", "mech_base_building"]),
+    "stealth": (["mech_stealth", "mech_social_stealth"], []),
+    "fighting": (["mech_fighting_combos"], ["mech_character_action"]),
+    "racing": (["mech_vehicular"], []),
+    "simulation": (["mech_deep_simulation", "mech_life_sim", "mech_tycoon"],
+                   ["mech_city_building", "mech_colony_sim"]),
+    "sim": (["mech_deep_simulation", "mech_life_sim", "mech_tycoon"],
+            ["mech_city_building", "mech_colony_sim"]),
+    "soulslike": (["mech_soulslike_combat"],
+                  ["mech_parry", "mech_dodge_roll", "mech_stagger_poise"]),
+    "fantasy": (["theme_high_fantasy", "theme_dark_fantasy"],
+                ["theme_medieval", "theme_mythology", "theme_urban_fantasy"]),
+    "sci-fi": (["theme_science_fiction", "theme_space_opera"],
+               ["theme_cyberpunk", "theme_hard_sci_fi"]),
+    "scifi": (["theme_science_fiction", "theme_space_opera"],
+              ["theme_cyberpunk", "theme_hard_sci_fi"]),
+}
+
+# The long tail: single-tier umbrella terms (all STRONG). No single trait is
+# named "jrpg" or "cozy", so these map a genre/feeling/theme word to the trait
+# cluster that defines it. Merged with the deterministic name + steam_tag_hints.
+SIMPLE_ALIASES = {
+    # genres / mechanics
     "jrpg": ["struct_xp_levels", "mech_turn_based_combat", "mech_party_management", "aes_anime"],
     "crpg": ["mech_dialogue_trees", "mech_party_management", "mech_skill_checks", "aes_isometric"],
-    "shooter": ["mech_gunplay", "mech_cover_shooter", "mech_twin_stick", "mech_bullet_hell"],
-    "fps": ["mech_gunplay", "aes_first_person_view"],
-    "platformer": ["mech_platforming", "mech_precision_platforming"],
-    "metroidvania": ["struct_metroidvania"],
-    "roguelike": ["struct_run_based", "struct_meta_progression", "mech_permadeath"],
-    "roguelite": ["struct_run_based", "struct_meta_progression"],
-    "deckbuilder": ["mech_deckbuilding", "mech_card_battler"],
-    "deckbuilding": ["mech_deckbuilding", "mech_card_battler"],
-    "strategy": ["mech_rts", "mech_4x", "mech_grand_strategy", "mech_tactical_combat"],
     "rts": ["mech_rts"],
     "4x": ["mech_4x"],
     "tactics": ["mech_tactical_combat", "struct_grid_map"],
     "tactical": ["mech_tactical_combat"],
-    "fighting": ["mech_fighting_combos"],
     "fighter": ["mech_fighting_combos"],
-    "racing": ["mech_vehicular"],
     "driving": ["mech_vehicular"],
-    "survival": ["mech_survival_needs", "theme_survival"],
-    "puzzle": ["mech_environmental_puzzles", "mech_logic_puzzles", "mech_physics_puzzles",
-               "mech_spatial_puzzles"],
-    "stealth": ["mech_stealth", "mech_social_stealth"],
     "sandbox": ["struct_sandbox", "mech_freeform_building"],
     "open world": ["struct_open_world"],
     "openworld": ["struct_open_world"],
-    "soulslike": ["mech_soulslike_combat"],
     "souls": ["mech_soulslike_combat"],
     "hack and slash": ["mech_hack_and_slash"],
     "battle royale": ["struct_battle_royale"],
@@ -90,7 +119,6 @@ GENRE_ALIASES = {
     "tower defense": ["mech_tower_defense"],
     "rhythm": ["mech_rhythm"],
     "sports": ["theme_sports"],
-    "horror": ["theme_horror", "theme_psychological_horror", "tone_horrific", "tone_dread"],
     "detective": ["theme_detective"],
     "mystery": ["theme_mystery", "theme_detective"],
     "co-op": ["struct_online_coop", "struct_local_coop", "struct_coop_campaign"],
@@ -132,10 +160,7 @@ GENRE_ALIASES = {
     "atmospheric": ["tone_contemplative", "tone_lonely", "aes_ambient_score"],
     "beautiful": ["aes_painterly", "aes_watercolor"],
     # themes
-    "sci-fi": ["theme_science_fiction", "theme_space_opera"],
-    "scifi": ["theme_science_fiction", "theme_space_opera"],
     "science fiction": ["theme_science_fiction"],
-    "fantasy": ["theme_high_fantasy", "theme_dark_fantasy"],
     "medieval": ["theme_medieval"],
     "post-apocalyptic": ["theme_post_apocalyptic"],
     "apocalypse": ["theme_post_apocalyptic"],
@@ -340,29 +365,65 @@ def top_game_ids(conn, n: int) -> set:
 
 
 def build_search_index(enriched, traits_by_id, catalog, hints) -> dict:
-    """Two-tier search index: a trait table (id, name, aliases for token->trait
-    mapping) and per-game sparse weight vectors (top-15 traits, quantized to a
-    byte). Aliases = trait name + steam_tag_hints + hand-tuned umbrella terms."""
-    genre_by_trait: dict[str, list[str]] = {}
-    dropped = set()
-    for term, ids in GENRE_ALIASES.items():
-        for tid in ids:
-            if tid in catalog:
-                genre_by_trait.setdefault(tid, []).append(term)
-            else:
-                dropped.add(tid)
-    if dropped:
-        print(f"  warning: {len(dropped)} alias trait ids not in vocab: {sorted(dropped)}")
+    """Two-tier search index:
 
+      traits   [{id, name}]                    the trait table (index = position)
+      aliases  {term: [[traitIdx, prio], ...]} token -> weighted trait mapping,
+               prio in 0..100 (see STRONG/WEAK/HINT_PRIORITY)
+      games    [{slug, title, appid, t, w}]    sparse weight vectors: t = trait
+               indices, w = weights quantized to a byte; appid drives cover art
+
+    A term's aliases carry PER-TRAIT priority so ranking leans on core identity:
+    a game's score for a term is its best (weight x priority) over that term's
+    traits. Aliases come from three sources, priority = max unless a CORE_GENRES
+    tier overrides: trait name (STRONG), steam_tag_hints (HINT_PRIORITY), and the
+    hand-tuned umbrella tables. Trait ids absent from the published set (or the
+    vocab) are dropped with a warning, so a rename can't silently break search."""
     used = sorted({t["id"] for r in enriched for t in traits_by_id[r["igdb_id"]]})
     idx_of = {tid: i for i, tid in enumerate(used)}
-    traits_out = []
-    for tid in used:
-        name = catalog[tid][0]
-        aliases = {name.lower()}
-        aliases.update(h.lower() for h in hints.get(tid, []))
-        aliases.update(genre_by_trait.get(tid, []))
-        traits_out.append({"id": tid, "name": name, "aliases": sorted(aliases)})
+    traits_out = [{"id": tid, "name": catalog[tid][0]} for tid in used]
+
+    # term -> {traitIdx: priority(0..1)}, built in ascending authority so later
+    # sources win: auto (name/hints) < SIMPLE_ALIASES < CORE_GENRES (override).
+    alias_prio: dict[str, dict[int, float]] = {}
+    dropped: set[str] = set()
+
+    def add(term: str, tid: str, prio: float) -> None:
+        i = idx_of.get(tid)
+        if i is None:
+            dropped.add(tid)
+            return
+        bucket = alias_prio.setdefault(term, {})
+        bucket[i] = max(bucket.get(i, 0.0), prio)
+
+    for tid in used:                                   # deterministic auto aliases
+        add(catalog[tid][0].lower(), tid, STRONG)
+        for h in hints.get(tid, []):
+            add(h.lower(), tid, HINT_PRIORITY)
+    for term, ids in SIMPLE_ALIASES.items():
+        for tid in ids:
+            add(term, tid, STRONG)
+    for term, (strong, weak) in CORE_GENRES.items():   # authoritative: replace
+        bucket: dict[int, float] = {}
+        for tid in strong:
+            i = idx_of.get(tid)
+            (bucket.__setitem__(i, STRONG) if i is not None else dropped.add(tid))
+        for tid in weak:
+            i = idx_of.get(tid)
+            if i is None:
+                dropped.add(tid)
+            else:
+                bucket.setdefault(i, WEAK)
+        if bucket:
+            alias_prio[term] = bucket
+    if dropped:
+        print(f"  warning: {len(dropped)} alias trait ids not in published set: "
+              f"{sorted(dropped)}")
+
+    aliases_out = {
+        term: sorted(([i, round(p * 100)] for i, p in bucket.items()), key=lambda e: e[0])
+        for term, bucket in sorted(alias_prio.items())
+    }
 
     games_out = []
     for r in enriched:
@@ -370,11 +431,12 @@ def build_search_index(enriched, traits_by_id, catalog, hints) -> dict:
         games_out.append({
             "slug": r["slug"],
             "title": r["title"],
+            "appid": r["steam_appid"],
             "t": [idx_of[t["id"]] for t in ts],
             "w": [max(1, round(t["weight"] * WEIGHT_QUANT)) for t in ts],
         })
     games_out.sort(key=lambda g: g["slug"])
-    return {"traits": traits_out, "games": games_out}
+    return {"traits": traits_out, "aliases": aliases_out, "games": games_out}
 
 
 def main() -> None:

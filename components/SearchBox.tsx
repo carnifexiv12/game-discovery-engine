@@ -1,181 +1,29 @@
 /**
- * Homepage search — two-tier, over the published catalog. Lazy-loads
- * /search-index.json + Fuse.js on first focus (never on page load; the index is
- * ~1.4MB).
+ * Homepage search dropdown. Thin UI over lib/search (shared with the /search
+ * results page): lazy-loads the index + Fuse on first focus, shows the top 8
+ * matches for quick navigation, and hands everything else off to the results
+ * page.
  *
- * TIER 1 (title): Fuse fuzzy-matches title/slug; close title matches rank first.
- * TIER 2 (trait): query tokens are mapped to vocabulary traits via an alias
- *   table (each trait's name + Steam-tag aliases + hand-tuned umbrella terms like
- *   "rpg"/"shooter"/"retro"). A game scores by the sum of its weights on the
- *   matched traits, and must soft-match EVERY resolved term (weighted
- *   intersection) — so "rpg shooter retro" returns retro shooter-RPGs, not every
- *   RPG. Matched traits are shown as chips so the user sees why it matched.
- * Mixed queries run both tiers, title matches interleaved first. When nothing
- * clears the intersection bar, the best partial matches show under a divider.
+ * - Click a row (or ArrowDown + Enter) -> that game (quick nav).
+ * - Enter / Search button with nothing highlighted -> /search?q=... (all matches).
+ * - When matches > 8, a final "See all N results" row links to the same page.
  */
 
 import Link from "next/link";
 import { useRouter } from "next/router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { Engine, loadEngine, Match, search } from "../lib/search";
 
-interface TraitDef { id: string; name: string; aliases: string[]; }
-interface GameEntry {
-  slug: string;
-  title: string;
-  t: number[]; // trait indices (into traits[])
-  w: number[]; // quantized weights, parallel to t
-  wmap?: Map<number, number>;
-}
-interface IndexData { traits: TraitDef[]; games: GameEntry[]; }
-interface Result { slug: string; title: string; chips: string[]; }
-interface Engine {
-  fuse: { search: (q: string) => { item: GameEntry; score?: number }[] };
-  traits: TraitDef[];
-  games: GameEntry[];
-  aliasMap: Map<string, number[]>;
-}
+const DROPDOWN_MAX = 8;
 
-let enginePromise: Promise<Engine> | null = null;
-
-function loadEngine(): Promise<Engine> {
-  if (!enginePromise) {
-    enginePromise = (async () => {
-      const [{ default: Fuse }, res] = await Promise.all([
-        import("fuse.js"),
-        fetch("/search-index.json"),
-      ]);
-      const data: IndexData = await res.json();
-      for (const g of data.games) {
-        const m = new Map<number, number>();
-        for (let i = 0; i < g.t.length; i++) m.set(g.t[i], g.w[i]);
-        g.wmap = m;
-      }
-      const aliasMap = new Map<string, number[]>();
-      data.traits.forEach((t, i) => {
-        for (const a of t.aliases) {
-          const arr = aliasMap.get(a);
-          if (arr) arr.push(i);
-          else aliasMap.set(a, [i]);
-        }
-      });
-      const fuse = new Fuse(data.games, {
-        includeScore: true,
-        threshold: 0.3, // tighter: keeps close title matches, drops fuzzy noise
-        ignoreLocation: true,
-        keys: [
-          { name: "title", weight: 0.85 },
-          { name: "slug", weight: 0.15 },
-        ],
-      });
-      return { fuse, traits: data.traits, games: data.games, aliasMap };
-    })();
-  }
-  return enginePromise;
-}
-
-// Query words -> resolved trait terms. Prefers a two-word alias ("open world")
-// over its parts. Unresolved words fall through to the title tier.
-function resolveTerms(query: string, aliasMap: Map<string, number[]>) {
-  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-  const terms: { label: string; idxs: number[] }[] = [];
-  let i = 0;
-  while (i < words.length) {
-    const w2 = words[i + 1];
-    // Prefer a two-word intersection when both words resolve on their own
-    // ("roguelike deckbuilder"); only fall back to a bigram alias when they
-    // don't ("open world", "science fiction").
-    const bothResolve = !!w2 && aliasMap.has(words[i]) && aliasMap.has(w2);
-    const bigram = w2 ? `${words[i]} ${w2}` : null;
-    if (!bothResolve && bigram && aliasMap.has(bigram)) {
-      terms.push({ label: bigram, idxs: aliasMap.get(bigram)! });
-      i += 2;
-    } else if (aliasMap.has(words[i])) {
-      terms.push({ label: words[i], idxs: aliasMap.get(words[i])! });
-      i += 1;
-    } else {
-      i += 1;
-    }
-  }
-  return terms;
-}
-
-function runSearch(engine: Engine, query: string): { results: Result[]; partial: boolean } {
-  const q = query.trim();
-  if (!q) return { results: [], partial: false };
-  const { fuse, traits, games, aliasMap } = engine;
-  const nameOf = (idx: number) => traits[idx].name;
-
-  // Tier 1 — title/slug, good matches only.
-  const titleHits = fuse
-    .search(q)
-    .filter((r) => (r.score ?? 1) <= 0.4)
-    .slice(0, 8)
-    .map((r) => r.item);
-
-  // Tier 2 — weighted trait intersection.
-  const terms = resolveTerms(q, aliasMap);
-  let exactTrait: { g: GameEntry; score: number; chips: number[] }[] = [];
-  let partialTrait: { g: GameEntry; matched: number; score: number; chips: number[] }[] = [];
-  if (terms.length) {
-    const scored: { g: GameEntry; matched: number; score: number; chips: number[] }[] = [];
-    for (const g of games) {
-      let matched = 0;
-      let score = 0;
-      const chips: number[] = [];
-      for (const term of terms) {
-        let best = 0;
-        let bestIdx = -1;
-        for (const idx of term.idxs) {
-          const w = g.wmap!.get(idx) || 0;
-          if (w > best) {
-            best = w;
-            bestIdx = idx;
-          }
-        }
-        if (best > 0) {
-          matched += 1;
-          score += best;
-          chips.push(bestIdx);
-        }
-      }
-      if (matched > 0) scored.push({ g, matched, score, chips });
-    }
-    exactTrait = scored
-      .filter((s) => s.matched === terms.length)
-      .sort((a, b) => b.score - a.score);
-    partialTrait = scored
-      .filter((s) => s.matched < terms.length)
-      .sort((a, b) => b.matched - a.matched || b.score - a.score);
-  }
-
-  const seen = new Set<string>();
-  const results: Result[] = [];
-  const push = (g: GameEntry, chips: string[]) => {
-    if (seen.has(g.slug) || results.length >= 8) return;
-    seen.add(g.slug);
-    results.push({ slug: g.slug, title: g.title, chips });
-  };
-
-  for (const g of titleHits) push(g, g.t.slice(0, 3).map(nameOf));
-  for (const s of exactTrait) push(s.g, s.chips.map(nameOf));
-  if (results.length > 0) return { results, partial: false };
-
-  // Fallback: best partial matches, shown under a "close but not exact" divider.
-  for (const s of partialTrait) {
-    if (seen.has(s.g.slug) || results.length >= 8) continue;
-    seen.add(s.g.slug);
-    results.push({ slug: s.g.slug, title: s.g.title, chips: s.chips.map(nameOf) });
-  }
-  return { results, partial: results.length > 0 };
-}
-
-export default function SearchBox() {
+export default function SearchBox({ initialQuery = "" }: { initialQuery?: string }) {
   const router = useRouter();
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<Result[]>([]);
+  const [query, setQuery] = useState(initialQuery);
+  const [matches, setMatches] = useState<Match[]>([]);
+  const [total, setTotal] = useState(0);
   const [partial, setPartial] = useState(false);
   const [open, setOpen] = useState(false);
-  const [active, setActive] = useState(0);
+  const [active, setActive] = useState(-1); // -1 = nothing highlighted
   const [ready, setReady] = useState(false);
   const engineRef = useRef<Engine | null>(null);
   const boxRef = useRef<HTMLDivElement>(null);
@@ -189,17 +37,26 @@ export default function SearchBox() {
     }
   }, []);
 
+  // Reflect the active query when navigated to a new /search?q= (the results
+  // page passes it in). Loads the engine so a subsequent focus is instant.
+  useEffect(() => {
+    setQuery(initialQuery);
+    if (initialQuery) ensureLoaded();
+  }, [initialQuery, ensureLoaded]);
+
   useEffect(() => {
     const q = query.trim();
     if (!q || !engineRef.current) {
-      setResults([]);
+      setMatches([]);
+      setTotal(0);
       setPartial(false);
       return;
     }
-    const res = runSearch(engineRef.current, q);
-    setResults(res.results);
+    const res = search(engineRef.current, q);
+    setMatches(res.matches.slice(0, DROPDOWN_MAX));
+    setTotal(res.matches.length);
     setPartial(res.partial);
-    setActive(0);
+    setActive(-1);
   }, [query, ready]);
 
   useEffect(() => {
@@ -215,25 +72,34 @@ export default function SearchBox() {
     router.push(`/game/${slug}`);
   };
 
+  const submitSearch = () => {
+    const q = query.trim();
+    if (!q) return;
+    setOpen(false);
+    router.push(`/search?q=${encodeURIComponent(q)}`);
+  };
+
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Escape") {
       setOpen(false);
       return;
     }
-    if (!results.length) return;
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setActive((a) => (a + 1) % results.length);
+      if (matches.length) setActive((a) => (a + 1) % matches.length);
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      setActive((a) => (a - 1 + results.length) % results.length);
+      if (matches.length) setActive((a) => (a <= 0 ? matches.length - 1 : a - 1));
     } else if (e.key === "Enter") {
       e.preventDefault();
-      if (results[active]) go(results[active].slug);
+      // Highlighted a row -> open it; otherwise go to the full results page.
+      if (active >= 0 && matches[active]) go(matches[active].slug);
+      else submitSearch();
     }
   };
 
-  const showList = open && query.trim().length > 0 && (results.length > 0 || ready);
+  const showList = open && query.trim().length > 0 && (matches.length > 0 || ready);
+  const showSeeAll = total > matches.length;
 
   return (
     <div className="searchbox" ref={boxRef}>
@@ -242,7 +108,7 @@ export default function SearchBox() {
         role="search"
         onSubmit={(e) => {
           e.preventDefault();
-          if (results[active]) go(results[active].slug);
+          submitSearch();
         }}
       >
         <input
@@ -270,14 +136,14 @@ export default function SearchBox() {
 
       {showList && (
         <ul className="search-results" id="search-results" role="listbox">
-          {results.length > 0 ? (
+          {matches.length > 0 ? (
             <>
               {partial && (
                 <li className="search-divider" aria-hidden="true">
                   Close but not exact
                 </li>
               )}
-              {results.map((r, i) => (
+              {matches.map((r, i) => (
                 <li
                   key={r.slug}
                   role="option"
@@ -299,6 +165,19 @@ export default function SearchBox() {
                   </span>
                 </li>
               ))}
+              {showSeeAll && (
+                <li
+                  className="search-seeall"
+                  role="option"
+                  aria-selected={false}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    submitSearch();
+                  }}
+                >
+                  See all {total} results →
+                </li>
+              )}
             </>
           ) : (
             <li className="search-empty">
